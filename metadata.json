@@ -1,0 +1,6 @@
+{
+  "name": "Inventario de Equipos de Cómputo",
+  "description": "Sistema de gestión de inventario y auditoría para equipos All in One y periféricos con generación de reportes en PDF y base de datos relacional.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
