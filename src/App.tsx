@@ -12,10 +12,12 @@ import { DeleteConfirmModal } from './components/DeleteConfirmModal.tsx';
 import { SqlExportModal } from './components/SqlExportModal.tsx';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal.tsx';
 import { generateConsolidatedInventoryPdf, generateIndividualAuditPdf } from './utils/pdfGenerator.ts';
+import { exportInventoryToXLSX, exportInventoryToCSV } from './utils/excelExporter.ts';
 import {
   Monitor,
   Plus,
   FileDown,
+  FileSpreadsheet,
   Database,
   Search,
   Filter,
@@ -33,6 +35,7 @@ import {
   User,
   Image as ImageIcon,
   Check,
+  ChevronDown,
 } from 'lucide-react';
 
 export default function App() {
@@ -64,6 +67,7 @@ export default function App() {
 
   // Notificación tipo toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -212,6 +216,20 @@ export default function App() {
     showToast('Reporte consolidado de auditoría generado en PDF.');
   };
 
+  // Exportar reporte consolidado en Excel (XLSX)
+  const handleExportXlsx = () => {
+    if (equipos.length === 0) return;
+    exportInventoryToXLSX(equipos, stats || undefined, filtroDepartamento, filtroEstado);
+    showToast('Reporte de inventario exportado exitosamente a Excel (.xlsx).');
+  };
+
+  // Exportar reporte consolidado en CSV
+  const handleExportCsv = () => {
+    if (equipos.length === 0) return;
+    exportInventoryToCSV(equipos, filtroDepartamento, filtroEstado);
+    showToast('Reporte de inventario exportado exitosamente a CSV (.csv).');
+  };
+
   // Departamentos únicos para el filtro
   const departamentosDisponibles = Array.from(
     new Set([
@@ -296,16 +314,85 @@ export default function App() {
                 Script MariaDB
               </button>
 
-              <button
-                type="button"
-                onClick={handleExportConsolidatedPdf}
-                disabled={equipos.length === 0}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
-                title="Generar reporte completo de auditoría en formato PDF"
-              >
-                <FileDown className="w-3.5 h-3.5 text-slate-700" />
-                Reporte PDF
-              </button>
+              {/* Menú de Exportación de Reportes: PDF, Excel, CSV */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
+                  disabled={equipos.length === 0}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
+                  title="Exportar reporte de auditoría en formatos PDF, Excel o CSV"
+                >
+                  <FileDown className="w-3.5 h-3.5 text-slate-700" />
+                  <span>Exportar Reporte</span>
+                  <ChevronDown className="w-3 h-3 text-slate-500" />
+                </button>
+
+                {isExportDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-30"
+                      onClick={() => setIsExportDropdownOpen(false)}
+                    />
+                    <div className="absolute right-0 mt-1 w-56 bg-white rounded-xl shadow-lg border border-slate-200 z-40 py-1.5 animate-in fade-in zoom-in-95 duration-100">
+                      <div className="px-3 py-1.5 border-b border-slate-100">
+                        <p className="text-3xs uppercase tracking-wider font-bold text-slate-400">Formatos disponibles</p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsExportDropdownOpen(false);
+                          handleExportConsolidatedPdf();
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition-colors"
+                      >
+                        <div className="p-1 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
+                          <FileDown className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <div className="font-semibold text-slate-800">Reporte PDF</div>
+                          <div className="text-3xs text-slate-500">Documento imprimible con firmas</div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsExportDropdownOpen(false);
+                          handleExportXlsx();
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-emerald-50/60 flex items-center gap-2.5 transition-colors"
+                      >
+                        <div className="p-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <FileSpreadsheet className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <div className="font-semibold text-slate-800">Libro Excel (.xlsx)</div>
+                          <div className="text-3xs text-slate-500">Hojas con datos y resumen métrico</div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsExportDropdownOpen(false);
+                          handleExportCsv();
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-sky-50/60 flex items-center gap-2.5 transition-colors"
+                      >
+                        <div className="p-1 rounded-md bg-sky-50 text-sky-700 border border-sky-200">
+                          <FileSpreadsheet className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <div className="font-semibold text-slate-800">Archivo CSV (.csv)</div>
+                          <div className="text-3xs text-slate-500">Separado por punto y coma (UTF-8)</div>
+                        </div>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
 
               <button
                 type="button"
@@ -393,16 +480,42 @@ export default function App() {
             </div>
           </div>
 
-          <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-2xs text-slate-500">
-            <span>
-              Mostrando <strong className="text-slate-800">{equipos.length}</strong> equipos de cómputo All-in-One registrados
-            </span>
-            {(searchTerm || filtroDepartamento !== 'Todos' || filtroEstado !== 'Todos') && (
-              <span className="text-amber-700 font-medium">
-                Filtros activos: {searchTerm && `"${searchTerm}" `}
-                {filtroDepartamento !== 'Todos' && `• Depto: ${filtroDepartamento} `}
-                {filtroEstado !== 'Todos' && `• Estado: ${filtroEstado}`}
+          <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-2xs text-slate-500">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span>
+                Mostrando <strong className="text-slate-800">{equipos.length}</strong> equipos de cómputo All-in-One registrados
               </span>
+              {(searchTerm || filtroDepartamento !== 'Todos' || filtroEstado !== 'Todos') && (
+                <span className="text-amber-700 font-medium">
+                  • Filtros activos: {searchTerm && `"${searchTerm}" `}
+                  {filtroDepartamento !== 'Todos' && `[Depto: ${filtroDepartamento}] `}
+                  {filtroEstado !== 'Todos' && `[Estado: ${filtroEstado}]`}
+                </span>
+              )}
+            </div>
+
+            {equipos.length > 0 && (
+              <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                <span className="text-3xs text-slate-400 font-medium mr-1">Descarga rápida:</span>
+                <button
+                  type="button"
+                  onClick={handleExportXlsx}
+                  className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md font-semibold text-3xs flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Descargar lista filtrada en Excel (.xlsx)"
+                >
+                  <FileSpreadsheet className="w-3 h-3 text-emerald-600" />
+                  Excel (.xlsx)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportCsv}
+                  className="px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-md font-semibold text-3xs flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Descargar lista filtrada en CSV (.csv)"
+                >
+                  <FileSpreadsheet className="w-3 h-3 text-sky-600" />
+                  CSV (.csv)
+                </button>
+              </div>
             )}
           </div>
         </div>
