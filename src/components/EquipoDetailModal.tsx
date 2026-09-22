@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   Clock,
   Image as ImageIcon,
+  CreditCard,
 } from 'lucide-react';
 
 interface EquipoDetailModalProps {
@@ -151,6 +152,13 @@ export const EquipoDetailModal: React.FC<EquipoDetailModalProps> = ({
                   </span>
                 </div>
                 <div>
+                  <span className="text-slate-500 block text-2xs uppercase font-medium">C.C. Identificación</span>
+                  <span className="font-semibold text-slate-800 flex items-center gap-1 font-mono">
+                    <CreditCard className="w-3 h-3 text-slate-400" />
+                    {equipo.cc || 'No registrada'}
+                  </span>
+                </div>
+                <div className="col-span-2">
                   <span className="text-slate-500 block text-2xs uppercase font-medium">Departamento</span>
                   <span className="font-semibold text-slate-800 flex items-center gap-1">
                     <Building className="w-3 h-3 text-slate-400" />

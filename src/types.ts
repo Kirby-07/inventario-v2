@@ -21,6 +21,7 @@ export interface EquipoAllInOne {
   numero_serie: string;
   estado_actual: EstadoEquipo;
   responsable: string;
+  cc?: string;
   departamento: string;
   imagen_url?: string;
   notas?: string;

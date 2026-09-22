@@ -514,9 +514,16 @@ export default function App() {
 
                         {/* Responsable y Departamento */}
                         <td className="py-3 px-4">
-                          <div className="font-medium text-slate-800 flex items-center gap-1.5">
-                            <User className="w-3 h-3 text-slate-400" />
-                            {equipo.responsable}
+                          <div className="font-medium text-slate-800 flex items-center gap-1.5 flex-wrap">
+                            <span className="flex items-center gap-1.5">
+                              <User className="w-3 h-3 text-slate-400" />
+                              {equipo.responsable}
+                            </span>
+                            {equipo.cc && (
+                              <span className="inline-flex items-center text-3xs font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
+                                CC: {equipo.cc}
+                              </span>
+                            )}
                           </div>
                           <div className="text-2xs text-slate-500 flex items-center gap-1.5 mt-0.5">
                             <Building className="w-3 h-3 text-slate-400" />

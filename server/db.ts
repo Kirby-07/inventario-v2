@@ -56,6 +56,7 @@ export async function getDatabase(): Promise<Database> {
       numero_serie TEXT NOT NULL,
       estado_actual TEXT NOT NULL,
       responsable TEXT NOT NULL,
+      cc TEXT,
       departamento TEXT NOT NULL,
       imagen_url TEXT,
       notas TEXT,
@@ -74,6 +75,19 @@ export async function getDatabase(): Promise<Database> {
       FOREIGN KEY (equipo_id) REFERENCES equipos(id) ON DELETE CASCADE
     );
   `);
+
+  // Migración segura para SQLite existente sin columna cc
+  try {
+    const tableInfo = dbInstance.exec("PRAGMA table_info(equipos)");
+    if (tableInfo.length > 0) {
+      const hasCc = tableInfo[0].values.some((col: any) => col[1] === 'cc');
+      if (!hasCc) {
+        dbInstance.run("ALTER TABLE equipos ADD COLUMN cc TEXT;");
+      }
+    }
+  } catch (err) {
+    console.warn('Nota migración sqlite cc:', err);
+  }
 
   // Comprobar si hay equipos iniciales; si está vacía, sembramos datos representativos de muestra
   const checkStmt = dbInstance.prepare('SELECT COUNT(*) as count FROM equipos');
@@ -274,10 +288,11 @@ export async function getAllEquipos(filters?: {
       marca LIKE ? OR
       numero_serie LIKE ? OR
       responsable LIKE ? OR
+      cc LIKE ? OR
       departamento LIKE ?
     )`;
     const s = `%${filters.search}%`;
-    params.push(s, s, s, s, s);
+    params.push(s, s, s, s, s, s);
   }
 
   if (filters?.departamento && filters.departamento !== 'Todos') {
@@ -347,6 +362,7 @@ export async function createEquipo(data: {
   numero_serie: string;
   estado_actual: string;
   responsable: string;
+  cc?: string;
   departamento: string;
   imagen_url?: string;
   notas?: string;
@@ -371,14 +387,15 @@ export async function createEquipo(data: {
   checkStmt.free();
 
   db.run(
-    `INSERT INTO equipos (numero_activo, marca, numero_serie, estado_actual, responsable, departamento, imagen_url, notas)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO equipos (numero_activo, marca, numero_serie, estado_actual, responsable, cc, departamento, imagen_url, notas)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.numero_activo.trim(),
       data.marca.trim(),
       data.numero_serie.trim(),
       data.estado_actual,
       data.responsable.trim(),
+      (data.cc || '').trim(),
       data.departamento.trim(),
       data.imagen_url || '',
       data.notas || '',
@@ -427,6 +444,7 @@ export async function updateEquipo(
     numero_serie: string;
     estado_actual: string;
     responsable: string;
+    cc?: string;
     departamento: string;
     imagen_url?: string;
     notas?: string;
@@ -455,7 +473,7 @@ export async function updateEquipo(
   db.run(
     `UPDATE equipos 
      SET numero_activo = ?, marca = ?, numero_serie = ?, estado_actual = ?,
-         responsable = ?, departamento = ?, imagen_url = ?, notas = ?, updated_at = CURRENT_TIMESTAMP
+         responsable = ?, cc = ?, departamento = ?, imagen_url = ?, notas = ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`,
     [
       data.numero_activo.trim(),
@@ -463,6 +481,7 @@ export async function updateEquipo(
       data.numero_serie.trim(),
       data.estado_actual,
       data.responsable.trim(),
+      (data.cc || '').trim(),
       data.departamento.trim(),
       data.imagen_url !== undefined ? data.imagen_url : '',
       data.notas !== undefined ? data.notas : '',
@@ -597,6 +616,7 @@ CREATE TABLE IF NOT EXISTS equipos (
   numero_serie VARCHAR(150) NOT NULL,
   estado_actual ENUM('Operativo', 'En mantenimiento', 'Dañado', 'En bodega / Desuso') NOT NULL,
   responsable VARCHAR(150) NOT NULL,
+  cc VARCHAR(50) NULL,
   departamento VARCHAR(150) NOT NULL,
   imagen_url LONGTEXT NULL,
   notas TEXT NULL,
@@ -622,7 +642,8 @@ CREATE TABLE IF NOT EXISTS perifericos (
   for (const eq of equipos) {
     const safeImg = eq.imagen_url ? `'${eq.imagen_url.replace(/'/g, "\\'")}'` : 'NULL';
     const safeNotas = eq.notas ? `'${eq.notas.replace(/'/g, "\\'")}'` : 'NULL';
-    sql += `\nINSERT INTO equipos (id, numero_activo, marca, numero_serie, estado_actual, responsable, departamento, imagen_url, notas) VALUES (${eq.id}, '${eq.numero_activo}', '${eq.marca}', '${eq.numero_serie}', '${eq.estado_actual}', '${eq.responsable}', '${eq.departamento}', ${safeImg}, ${safeNotas});\n`;
+    const safeCc = eq.cc ? `'${eq.cc.replace(/'/g, "\\'")}'` : 'NULL';
+    sql += `\nINSERT INTO equipos (id, numero_activo, marca, numero_serie, estado_actual, responsable, cc, departamento, imagen_url, notas) VALUES (${eq.id}, '${eq.numero_activo}', '${eq.marca}', '${eq.numero_serie}', '${eq.estado_actual}', '${eq.responsable}', ${safeCc}, '${eq.departamento}', ${safeImg}, ${safeNotas});\n`;
 
     if (eq.perifericos) {
       for (const p of eq.perifericos) {

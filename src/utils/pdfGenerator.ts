@@ -75,7 +75,8 @@ export function generateIndividualAuditPdf(equipo: EquipoAllInOne) {
   doc.setFont('helvetica', 'bold');
   doc.text('Responsable / Custodio:', 18 + colWidth, startY + 8);
   doc.setFont('helvetica', 'normal');
-  doc.text(equipo.responsable, 18 + colWidth + 42, startY + 8);
+  const responsableTexto = equipo.cc ? `${equipo.responsable} (CC: ${equipo.cc})` : equipo.responsable;
+  doc.text(responsableTexto, 18 + colWidth + 42, startY + 8);
 
   doc.setFont('helvetica', 'bold');
   doc.text('Departamento / Área:', 18 + colWidth, startY + 16);
@@ -195,7 +196,8 @@ export function generateIndividualAuditPdf(equipo: EquipoAllInOne) {
   doc.setFont('helvetica', 'bold');
   doc.text(`Custodio: ${equipo.responsable}`, sig2X + sigBoxWidth / 2, sigBoxY + 5, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`Dpto: ${equipo.departamento}`, sig2X + sigBoxWidth / 2, sigBoxY + 10, { align: 'center' });
+  const dptoCc = equipo.cc ? `C.C. ${equipo.cc} | Dpto: ${equipo.departamento}` : `Dpto: ${equipo.departamento}`;
+  doc.text(dptoCc, sig2X + sigBoxWidth / 2, sigBoxY + 10, { align: 'center' });
 
   // Guardar archivo
   const safeFilename = `Acta_Auditoria_${equipo.numero_activo.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
@@ -285,7 +287,7 @@ export function generateConsolidatedInventoryPdf(
       eq.marca,
       eq.numero_serie,
       eq.estado_actual,
-      eq.responsable,
+      eq.cc ? `${eq.responsable}\n(CC: ${eq.cc})` : eq.responsable,
       eq.departamento,
       formatoPer(mouse),
       formatoPer(teclado),

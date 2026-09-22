@@ -80,6 +80,7 @@ export async function initMySQLTables() {
       numero_serie VARCHAR(150) NOT NULL,
       estado_actual ENUM('Operativo', 'En mantenimiento', 'Dañado', 'En bodega / Desuso') NOT NULL,
       responsable VARCHAR(150) NOT NULL,
+      cc VARCHAR(50) NULL,
       departamento VARCHAR(150) NOT NULL,
       imagen_url LONGTEXT NULL,
       notas TEXT NULL,
@@ -87,6 +88,16 @@ export async function initMySQLTables() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  // Migración segura si la tabla equipos ya existía sin la columna cc
+  try {
+    const [cols]: any = await p.query("SHOW COLUMNS FROM equipos LIKE 'cc'");
+    if (cols.length === 0) {
+      await p.query("ALTER TABLE equipos ADD COLUMN cc VARCHAR(50) NULL AFTER responsable");
+    }
+  } catch (err) {
+    console.warn('Nota sobre migración de columna cc:', err);
+  }
 
   await p.query(`
     CREATE TABLE IF NOT EXISTS perifericos (
@@ -117,6 +128,7 @@ async function seedMySQLSampleData(p: mysql.Pool) {
         numero_serie: 'HP-AIO-8849201',
         estado_actual: 'Operativo',
         responsable: 'Carlos Andrés Mendoza',
+        cc: '1098765432',
         departamento: 'Sistemas e Infraestructura',
         imagen_url: '',
         notas: 'Ubicado en el puesto A-12. Asignado en auditoría Q1.',
@@ -134,6 +146,7 @@ async function seedMySQLSampleData(p: mysql.Pool) {
         numero_serie: 'LN-AIO-3319082',
         estado_actual: 'Operativo',
         responsable: 'Mariana Gómez Sánchez',
+        cc: '1014234567',
         departamento: 'Contabilidad y Finanzas',
         imagen_url: '',
         notas: 'Equipo principal de tesorería y nómina.',
@@ -182,14 +195,15 @@ async function seedMySQLSampleData(p: mysql.Pool) {
 
   for (const item of sampleEquipos) {
     const [result]: any = await p.query(
-      `INSERT INTO equipos (numero_activo, marca, numero_serie, estado_actual, responsable, departamento, imagen_url, notas)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO equipos (numero_activo, marca, numero_serie, estado_actual, responsable, cc, departamento, imagen_url, notas)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         item.equipo.numero_activo,
         item.equipo.marca,
         item.equipo.numero_serie,
         item.equipo.estado_actual,
         item.equipo.responsable,
+        item.equipo.cc || '',
         item.equipo.departamento,
         item.equipo.imagen_url || '',
         item.equipo.notas || '',
@@ -222,10 +236,11 @@ export async function getAllEquiposMySQL(filters?: {
       marca LIKE ? OR
       numero_serie LIKE ? OR
       responsable LIKE ? OR
+      cc LIKE ? OR
       departamento LIKE ?
     )`;
     const s = `%${filters.search}%`;
-    params.push(s, s, s, s, s);
+    params.push(s, s, s, s, s, s);
   }
 
   if (filters?.departamento && filters.departamento !== 'Todos') {
@@ -273,6 +288,7 @@ export async function createEquipoMySQL(data: {
   numero_serie: string;
   estado_actual: string;
   responsable: string;
+  cc?: string;
   departamento: string;
   imagen_url?: string;
   notas?: string;
@@ -292,14 +308,15 @@ export async function createEquipoMySQL(data: {
   }
 
   const [res]: any = await p.query(
-    `INSERT INTO equipos (numero_activo, marca, numero_serie, estado_actual, responsable, departamento, imagen_url, notas)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO equipos (numero_activo, marca, numero_serie, estado_actual, responsable, cc, departamento, imagen_url, notas)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.numero_activo.trim(),
       data.marca.trim(),
       data.numero_serie.trim(),
       data.estado_actual,
       data.responsable.trim(),
+      (data.cc || '').trim(),
       data.departamento.trim(),
       data.imagen_url || '',
       data.notas || '',
@@ -335,6 +352,7 @@ export async function updateEquipoMySQL(
     numero_serie: string;
     estado_actual: string;
     responsable: string;
+    cc?: string;
     departamento: string;
     imagen_url?: string;
     notas?: string;
@@ -359,7 +377,7 @@ export async function updateEquipoMySQL(
   await p.query(
     `UPDATE equipos 
      SET numero_activo = ?, marca = ?, numero_serie = ?, estado_actual = ?,
-         responsable = ?, departamento = ?, imagen_url = ?, notas = ?
+         responsable = ?, cc = ?, departamento = ?, imagen_url = ?, notas = ?
      WHERE id = ?`,
     [
       data.numero_activo.trim(),
@@ -367,6 +385,7 @@ export async function updateEquipoMySQL(
       data.numero_serie.trim(),
       data.estado_actual,
       data.responsable.trim(),
+      (data.cc || '').trim(),
       data.departamento.trim(),
       data.imagen_url !== undefined ? data.imagen_url : '',
       data.notas !== undefined ? data.notas : '',

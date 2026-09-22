@@ -42,6 +42,7 @@ export const EquipoFormModal: React.FC<EquipoFormModalProps> = ({
   const [numeroSerie, setNumeroSerie] = useState('');
   const [estadoActual, setEstadoActual] = useState<EstadoEquipo>('Operativo');
   const [responsable, setResponsable] = useState('');
+  const [cc, setCc] = useState('');
   const [departamento, setDepartamento] = useState('');
   const [imagenUrl, setImagenUrl] = useState('');
   const [notas, setNotas] = useState('');
@@ -75,6 +76,7 @@ export const EquipoFormModal: React.FC<EquipoFormModalProps> = ({
       setNumeroSerie(equipoToEdit.numero_serie || '');
       setEstadoActual(equipoToEdit.estado_actual || 'Operativo');
       setResponsable(equipoToEdit.responsable || '');
+      setCc(equipoToEdit.cc || '');
       setDepartamento(equipoToEdit.departamento || '');
       setImagenUrl(equipoToEdit.imagen_url || '');
       setNotas(equipoToEdit.notas || '');
@@ -115,6 +117,7 @@ export const EquipoFormModal: React.FC<EquipoFormModalProps> = ({
       setNumeroSerie('');
       setEstadoActual('Operativo');
       setResponsable('');
+      setCc('');
       setDepartamento('');
       setImagenUrl('');
       setNotas('');
@@ -173,6 +176,7 @@ export const EquipoFormModal: React.FC<EquipoFormModalProps> = ({
         numero_serie: numeroSerie.trim(),
         estado_actual: estadoActual,
         responsable: responsable.trim(),
+        cc: cc.trim(),
         departamento: departamento.trim(),
         imagen_url: imagenUrl,
         notas: notas.trim(),
@@ -304,6 +308,19 @@ export const EquipoFormModal: React.FC<EquipoFormModalProps> = ({
                   placeholder="Nombre completo del empleado"
                   value={responsable}
                   onChange={(e) => setResponsable(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-slate-800 focus:border-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  Cédula de Ciudadanía (CC)
+                </label>
+                <input
+                  type="text"
+                  placeholder="N° de identificación del responsable"
+                  value={cc}
+                  onChange={(e) => setCc(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-slate-800 focus:border-slate-800"
                 />
               </div>

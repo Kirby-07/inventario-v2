@@ -14,7 +14,7 @@ import {
 import { isMySQLConfigured, initMySQLTables, testMySQLConnection } from './server/mysql.ts';
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 // Middleware para procesar JSON con capacidad para imágenes en base64
 app.use(express.json({ limit: '50mb' }));
@@ -101,6 +101,7 @@ app.post('/api/equipos', async (req, res) => {
       numero_serie,
       estado_actual,
       responsable,
+      cc,
       departamento,
       imagen_url,
       notas,
@@ -120,6 +121,7 @@ app.post('/api/equipos', async (req, res) => {
       numero_serie,
       estado_actual,
       responsable,
+      cc,
       departamento,
       imagen_url,
       notas,
@@ -147,6 +149,7 @@ app.put('/api/equipos/:id', async (req, res) => {
       numero_serie,
       estado_actual,
       responsable,
+      cc,
       departamento,
       imagen_url,
       notas,
@@ -165,6 +168,7 @@ app.put('/api/equipos/:id', async (req, res) => {
       numero_serie,
       estado_actual,
       responsable,
+      cc,
       departamento,
       imagen_url,
       notas,
