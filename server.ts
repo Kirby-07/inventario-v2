@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
@@ -14,7 +15,7 @@ import {
 import { isMySQLConfigured, initMySQLTables, testMySQLConnection } from './server/mysql.ts';
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) || 3001;
 
 // Middleware para procesar JSON con capacidad para imágenes en base64
 app.use(express.json({ limit: '50mb' }));

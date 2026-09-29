@@ -1,3 +1,4 @@
+import 'dotenv/config'; // 1. Cargar variables del archivo .env inmediatamente
 import mysql from 'mysql2/promise';
 import { EquipoAllInOne, Periferico, InventoryStats } from '../src/types.ts';
 
@@ -13,31 +14,23 @@ export function isMySQLConfigured(): boolean {
 export function getMySQLPool(): mysql.Pool {
   if (pool) return pool;
 
-  if (process.env.DATABASE_URL) {
-    // Para Aiven, Railway, PlanetScale u otros que requieren SSL con certificados autorizados
+  // 2. Priorizar los parámetros locales de Podman definidos en .env
+  if (process.env.DB_HOST && process.env.DB_USER) {
     pool = mysql.createPool({
-      uri: process.env.DATABASE_URL,
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0,
-      ssl: {
-        rejectUnauthorized: false,
-      },
-    });
-  } else {
-    pool = mysql.createPool({
-      host: process.env.DB_HOST || 'localhost',
+      host: process.env.DB_HOST,
       port: Number(process.env.DB_PORT) || 3306,
-      user: process.env.DB_USER || 'root',
+      user: process.env.DB_USER,
       password: process.env.DB_PASSWORD || '',
       database: process.env.DB_NAME || 'inventario_computo',
       waitForConnections: true,
       connectionLimit: 10,
-      queueLimit: 0,
-      ssl: {
-        rejectUnauthorized: false,
-      },
+      queueLimit: 0
     });
+  } else if (process.env.DATABASE_URL) {
+    // Si se usa URL, en mysql2 se pasa la cadena directamente (no dentro de un objeto con { uri })
+    pool = mysql.createPool(process.env.DATABASE_URL);
+  } else {
+    throw new Error('No hay configuración de base de datos MySQL/MariaDB disponible.');
   }
 
   return pool;
@@ -220,46 +213,76 @@ async function seedMySQLSampleData(p: mysql.Pool) {
     }
   }
 }
-
 export async function getAllEquiposMySQL(filters?: {
   search?: string;
   departamento?: string;
   estado?: string;
 }): Promise<EquipoAllInOne[]> {
   const p = getMySQLPool();
-  let query = 'SELECT * FROM equipos WHERE 1=1';
+  
+  // Consulta relacional v2 con JOINs a custodios y departamentos
+  let query = `
+    SELECT 
+      e.id,
+      e.numero_activo,
+      e.marca,
+      e.numero_serie,
+      e.estado_equipo AS estado_actual,
+      COALESCE(CONCAT(c.nombres, ' ', c.apellidos), 'Sin custodio asignado') AS responsable,
+      COALESCE(c.cedula_ciudadania, '') AS cc,
+      COALESCE(d.nombre, 'Sin departamento') AS departamento,
+      e.imagen_url,
+      e.notas,
+      e.created_at,
+      e.updated_at
+    FROM equipos e
+    LEFT JOIN empleados_custodios c ON e.empleado_custodio_id = c.id
+    LEFT JOIN departamentos d ON c.departamento_id = d.id
+    WHERE 1=1
+  `;
   const params: any[] = [];
 
   if (filters?.search) {
     query += ` AND (
-      numero_activo LIKE ? OR
-      marca LIKE ? OR
-      numero_serie LIKE ? OR
-      responsable LIKE ? OR
-      cc LIKE ? OR
-      departamento LIKE ?
+      e.numero_activo LIKE ? OR
+      e.marca LIKE ? OR
+      e.numero_serie LIKE ? OR
+      CONCAT(c.nombres, ' ', c.apellidos) LIKE ? OR
+      c.cedula_ciudadania LIKE ? OR
+      d.nombre LIKE ?
     )`;
     const s = `%${filters.search}%`;
     params.push(s, s, s, s, s, s);
   }
 
   if (filters?.departamento && filters.departamento !== 'Todos') {
-    query += ' AND departamento = ?';
+    query += ' AND d.nombre = ?';
     params.push(filters.departamento);
   }
 
   if (filters?.estado && filters.estado !== 'Todos') {
-    query += ' AND estado_actual = ?';
+    query += ' AND e.estado_equipo = ?';
     params.push(filters.estado);
   }
 
-  query += ' ORDER BY id DESC';
+  query += ' ORDER BY e.id DESC';
 
   const [equipos]: any = await p.query(query, params);
 
+  // Mapear periféricos con el alias de estado_periferico -> estado_actual
   for (const eq of equipos) {
     const [perifs]: any = await p.query(
-      'SELECT * FROM perifericos WHERE equipo_id = ? ORDER BY id ASC',
+      `SELECT 
+        id, 
+        equipo_id, 
+        tipo, 
+        numero_activo, 
+        estado_periferico AS estado_actual, 
+        created_at, 
+        updated_at 
+      FROM perifericos 
+      WHERE equipo_id = ? 
+      ORDER BY id ASC`,
       [eq.id]
     );
     eq.perifericos = perifs;
@@ -270,18 +293,46 @@ export async function getAllEquiposMySQL(filters?: {
 
 export async function getEquipoByIdMySQL(id: number): Promise<EquipoAllInOne | null> {
   const p = getMySQLPool();
-  const [rows]: any = await p.query('SELECT * FROM equipos WHERE id = ?', [id]);
+  const [rows]: any = await p.query(
+    `SELECT 
+      e.id,
+      e.numero_activo,
+      e.marca,
+      e.numero_serie,
+      e.estado_equipo AS estado_actual,
+      COALESCE(CONCAT(c.nombres, ' ', c.apellidos), 'Sin custodio asignado') AS responsable,
+      COALESCE(c.cedula_ciudadania, '') AS cc,
+      COALESCE(d.nombre, 'Sin departamento') AS departamento,
+      e.imagen_url,
+      e.notas,
+      e.created_at,
+      e.updated_at
+    FROM equipos e
+    LEFT JOIN empleados_custodios c ON e.empleado_custodio_id = c.id
+    LEFT JOIN departamentos d ON c.departamento_id = d.id
+    WHERE e.id = ?`,
+    [id]
+  );
   if (rows.length === 0) return null;
 
   const equipo = rows[0];
   const [perifs]: any = await p.query(
-    'SELECT * FROM perifericos WHERE equipo_id = ? ORDER BY id ASC',
+    `SELECT 
+      id, 
+      equipo_id, 
+      tipo, 
+      numero_activo, 
+      estado_periferico AS estado_actual, 
+      created_at, 
+      updated_at 
+    FROM perifericos 
+    WHERE equipo_id = ? 
+    ORDER BY id ASC`,
     [id]
   );
   equipo.perifericos = perifs;
   return equipo;
 }
-
 export async function createEquipoMySQL(data: {
   numero_activo: string;
   marca: string;
@@ -415,17 +466,17 @@ export async function deleteEquipoMySQL(id: number): Promise<boolean> {
   await p.query('DELETE FROM equipos WHERE id = ?', [id]);
   return true;
 }
-
 export async function getInventoryStatsMySQL(): Promise<InventoryStats> {
   const p = getMySQLPool();
 
   const [tot]: any = await p.query('SELECT COUNT(*) as count FROM equipos');
   const totalEquipos = tot[0]?.count || 0;
 
+  // Consulta por estado_equipo de v2
   const [estados]: any = await p.query(`
-    SELECT estado_actual, COUNT(*) as count 
+    SELECT estado_equipo, COUNT(*) as count 
     FROM equipos 
-    GROUP BY estado_actual
+    GROUP BY estado_equipo
   `);
 
   let operativos = 0;
@@ -434,7 +485,7 @@ export async function getInventoryStatsMySQL(): Promise<InventoryStats> {
   let enBodega = 0;
 
   for (const row of estados) {
-    const est = String(row.estado_actual);
+    const est = String(row.estado_equipo);
     const count = Number(row.count);
     if (est === 'Operativo') operativos = count;
     else if (est === 'En mantenimiento') enMantenimiento = count;
@@ -445,10 +496,13 @@ export async function getInventoryStatsMySQL(): Promise<InventoryStats> {
   const [perTot]: any = await p.query('SELECT COUNT(*) as count FROM perifericos');
   const totalPerifericos = perTot[0]?.count || 0;
 
+  // Conteo de departamentos a través de las relaciones de v2
   const [depts]: any = await p.query(`
-    SELECT departamento, COUNT(*) as count 
-    FROM equipos 
-    GROUP BY departamento
+    SELECT COALESCE(d.nombre, 'Sin departamento') as departamento, COUNT(e.id) as count 
+    FROM equipos e
+    LEFT JOIN empleados_custodios c ON e.empleado_custodio_id = c.id
+    LEFT JOIN departamentos d ON c.departamento_id = d.id
+    GROUP BY d.nombre
   `);
   const departamentosCount: Record<string, number> = {};
   for (const row of depts) {
