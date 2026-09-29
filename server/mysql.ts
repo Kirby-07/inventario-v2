@@ -1,6 +1,7 @@
 import 'dotenv/config'; // 1. Cargar variables del archivo .env inmediatamente
 import mysql from 'mysql2/promise';
-import { EquipoAllInOne, Periferico, InventoryStats } from '../src/types.ts';
+import bcrypt from 'bcryptjs';
+import { EquipoAllInOne, Periferico, InventoryStats, AppUsuario, Rol } from '../src/types.ts';
 
 let pool: mysql.Pool | null = null;
 
@@ -104,6 +105,34 @@ export async function initMySQLTables() {
       CONSTRAINT fk_perifericos_equipo FOREIGN KEY (equipo_id) REFERENCES equipos(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  // Tablas de autenticación y roles (migrations/schemaV2.sql). No toca equipos/periféricos.
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS roles (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      nombre VARCHAR(50) NOT NULL UNIQUE,
+      descripcion VARCHAR(255) NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS app_usuarios (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      rol_id INT NOT NULL,
+      nombre_completo VARCHAR(150) NOT NULL,
+      username VARCHAR(50) NOT NULL UNIQUE,
+      email VARCHAR(150) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NOT NULL,
+      activo BOOLEAN NOT NULL DEFAULT TRUE,
+      ultimo_login DATETIME NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT fk_app_usuarios_rol FOREIGN KEY (rol_id) REFERENCES roles(id) ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await seedMySQLRolesAndUsers(p);
 
   // Sembrar datos de muestra si está vacía
   const [rows]: any = await p.query('SELECT COUNT(*) as count FROM equipos');
@@ -529,4 +558,170 @@ export async function getInventoryStatsMySQL(): Promise<InventoryStats> {
     departamentosCount,
     marcasCount,
   };
+}
+
+// ==========================================
+// AUTENTICACIÓN Y ROLES (tablas app_usuarios y roles de migrations/schemaV2.sql)
+// ==========================================
+
+async function seedMySQLRolesAndUsers(p: mysql.Pool) {
+  const [roleRows]: any = await p.query('SELECT COUNT(*) as count FROM roles');
+  if (Number(roleRows[0]?.count || 0) === 0) {
+    await p.query(`
+      INSERT INTO roles (id, nombre, descripcion) VALUES
+      (1, 'ADMIN', 'Control total: creación, edición, reasignación, eliminación y administración de usuarios'),
+      (2, 'TECNICO', 'Registro de equipos, periféricos y reasignación de custodios por retiro/ingreso'),
+      (3, 'CALIDAD', 'Solo lectura y generación de reportes (PDF, Excel, CSV), sin permisos de modificación')
+      ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), descripcion = VALUES(descripcion);
+    `);
+  }
+
+  const [userRows]: any = await p.query('SELECT COUNT(*) as count FROM app_usuarios');
+  if (Number(userRows[0]?.count || 0) === 0) {
+    await p.query(
+      `INSERT INTO app_usuarios (rol_id, nombre_completo, username, email, password_hash, activo) VALUES
+       (1, 'Administrador de Infraestructura TI', 'admin', 'admin@empresa.com', ?, 1),
+       (2, 'Carlos Méndez (Técnico de Soporte)', 'tecnico', 'tecnico@empresa.com', ?, 1),
+       (3, 'Beatriz Lozano (Auditora de Calidad)', 'calidad', 'calidad@empresa.com', ?, 1)`,
+      [await bcrypt.hash('admin123', 10), await bcrypt.hash('tecnico123', 10), await bcrypt.hash('calidad123', 10)]
+    );
+  }
+}
+
+export async function getAllRolesMySQL(): Promise<Rol[]> {
+  const p = getMySQLPool();
+  const [rows]: any = await p.query('SELECT id, nombre, descripcion FROM roles ORDER BY id ASC');
+  return rows;
+}
+
+export async function getAllUsuariosMySQL(): Promise<AppUsuario[]> {
+  const p = getMySQLPool();
+  const [rows]: any = await p.query(`
+    SELECT u.id, u.rol_id, u.nombre_completo, u.username, u.email, u.activo, u.ultimo_login, u.created_at,
+           r.nombre as rol_nombre, r.descripcion as rol_descripcion
+    FROM app_usuarios u
+    JOIN roles r ON u.rol_id = r.id
+    ORDER BY u.id ASC
+  `);
+  return rows.map((r: any) => ({
+    ...r,
+    activo: Boolean(r.activo),
+  }));
+}
+
+export async function getUsuarioByIdMySQL(id: number): Promise<AppUsuario | null> {
+  const p = getMySQLPool();
+  const [rows]: any = await p.query(`
+    SELECT u.id, u.rol_id, u.nombre_completo, u.username, u.email, u.activo, u.ultimo_login, u.created_at,
+           r.nombre as rol_nombre, r.descripcion as rol_descripcion
+    FROM app_usuarios u
+    JOIN roles r ON u.rol_id = r.id
+    WHERE u.id = ?
+  `, [id]);
+  if (rows.length === 0) return null;
+  return {
+    ...rows[0],
+    activo: Boolean(rows[0].activo),
+  };
+}
+
+export async function getUsuarioByUsernameOrEmailMySQL(identifier: string): Promise<any | null> {
+  const p = getMySQLPool();
+  const [rows]: any = await p.query(`
+    SELECT u.id, u.rol_id, u.nombre_completo, u.username, u.email, u.password_hash, u.activo, u.ultimo_login, u.created_at,
+           r.nombre as rol_nombre, r.descripcion as rol_descripcion
+    FROM app_usuarios u
+    JOIN roles r ON u.rol_id = r.id
+    WHERE u.username = ? OR u.email = ?
+  `, [identifier.trim(), identifier.trim()]);
+  if (rows.length === 0) return null;
+  return rows[0];
+}
+
+export async function createUsuarioMySQL(data: {
+  rol_id: number;
+  nombre_completo: string;
+  username: string;
+  email: string;
+  password: string;
+  activo?: boolean;
+}): Promise<AppUsuario> {
+  const p = getMySQLPool();
+  const pwdHash = await bcrypt.hash(data.password, 10);
+  const [result]: any = await p.query(`
+    INSERT INTO app_usuarios (rol_id, nombre_completo, username, email, password_hash, activo)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `, [
+    data.rol_id,
+    data.nombre_completo.trim(),
+    data.username.trim(),
+    data.email.trim().toLowerCase(),
+    pwdHash,
+    data.activo !== false ? 1 : 0,
+  ]);
+  const newId = result.insertId;
+  const user = await getUsuarioByIdMySQL(newId);
+  if (!user) throw new Error('Usuario no encontrado tras creación');
+  return user;
+}
+
+export async function updateUsuarioMySQL(
+  id: number,
+  data: {
+    rol_id?: number;
+    nombre_completo?: string;
+    username?: string;
+    email?: string;
+    password?: string;
+    activo?: boolean;
+  }
+): Promise<AppUsuario> {
+  const p = getMySQLPool();
+  const fields: string[] = [];
+  const params: any[] = [];
+
+  if (data.rol_id !== undefined) {
+    fields.push('rol_id = ?');
+    params.push(data.rol_id);
+  }
+  if (data.nombre_completo !== undefined) {
+    fields.push('nombre_completo = ?');
+    params.push(data.nombre_completo.trim());
+  }
+  if (data.username !== undefined) {
+    fields.push('username = ?');
+    params.push(data.username.trim());
+  }
+  if (data.email !== undefined) {
+    fields.push('email = ?');
+    params.push(data.email.trim().toLowerCase());
+  }
+  if (data.password) {
+    fields.push('password_hash = ?');
+    params.push(await bcrypt.hash(data.password, 10));
+  }
+  if (data.activo !== undefined) {
+    fields.push('activo = ?');
+    params.push(data.activo ? 1 : 0);
+  }
+
+  if (fields.length > 0) {
+    params.push(id);
+    await p.query(`UPDATE app_usuarios SET ${fields.join(', ')} WHERE id = ?`, params);
+  }
+
+  const updated = await getUsuarioByIdMySQL(id);
+  if (!updated) throw new Error('Usuario no encontrado');
+  return updated;
+}
+
+export async function deleteUsuarioMySQL(id: number): Promise<boolean> {
+  const p = getMySQLPool();
+  await p.query('DELETE FROM app_usuarios WHERE id = ?', [id]);
+  return true;
+}
+
+export async function updateUltimoLoginMySQL(id: number): Promise<void> {
+  const p = getMySQLPool();
+  await p.query('UPDATE app_usuarios SET ultimo_login = NOW() WHERE id = ?', [id]);
 }

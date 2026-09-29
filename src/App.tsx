@@ -4,13 +4,15 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { EquipoAllInOne, InventoryStats, DatabaseStatus } from './types.ts';
+import { EquipoAllInOne, InventoryStats, DatabaseStatus, AuthSession } from './types.ts';
 import { StatsOverview } from './components/StatsOverview.tsx';
 import { EquipoFormModal } from './components/EquipoFormModal.tsx';
 import { EquipoDetailModal } from './components/EquipoDetailModal.tsx';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal.tsx';
 import { SqlExportModal } from './components/SqlExportModal.tsx';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal.tsx';
+import { LoginView } from './components/LoginView.tsx';
+import { UserManagementView } from './components/UserManagementView.tsx';
 import { generateConsolidatedInventoryPdf, generateIndividualAuditPdf } from './utils/pdfGenerator.ts';
 import { exportInventoryToXLSX, exportInventoryToCSV } from './utils/excelExporter.ts';
 import {
@@ -36,9 +38,30 @@ import {
   Image as ImageIcon,
   Check,
   ChevronDown,
+  ShieldCheck,
+  Wrench,
+  Users,
+  LogOut,
+  Shield,
+  Lock,
 } from 'lucide-react';
 
 export default function App() {
+  // Sesión de usuario autenticado
+  const [session, setSession] = useState<AuthSession | null>(() => {
+    const saved = localStorage.getItem('inventario_auth_session');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  const [activeTab, setActiveTab] = useState<'inventario' | 'usuarios'>('inventario');
+
   const [equipos, setEquipos] = useState<EquipoAllInOne[]>([]);
   const [stats, setStats] = useState<InventoryStats | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -131,13 +154,38 @@ export default function App() {
     fetchDbStatus();
   }, [fetchData, fetchDbStatus]);
 
+  const handleLoginSuccess = (newSession: AuthSession) => {
+    setSession(newSession);
+    localStorage.setItem('inventario_auth_session', JSON.stringify(newSession));
+    showToast(`Bienvenido, ${newSession.user.nombre_completo} (${newSession.user.rol_nombre})`);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    setSession(null);
+    localStorage.removeItem('inventario_auth_session');
+    setActiveTab('inventario');
+    showToast('Sesión finalizada exitosamente.');
+  };
+
   // Manejador para guardar equipo (crear o actualizar)
   const handleSaveEquipo = async (equipoData: Partial<EquipoAllInOne>) => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (session?.token) {
+      headers['Authorization'] = `Bearer ${session.token}`;
+    }
+
     if (editingEquipo && editingEquipo.id) {
       // Actualizar
       const res = await fetch(`/api/equipos/${editingEquipo.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(equipoData),
       });
       if (!res.ok) {
@@ -149,7 +197,7 @@ export default function App() {
       // Crear
       const res = await fetch('/api/equipos', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(equipoData),
       });
       if (!res.ok) {
@@ -167,8 +215,14 @@ export default function App() {
     if (!equipoToDelete || !equipoToDelete.id) return;
     setIsDeleting(true);
     try {
+      const headers: Record<string, string> = {};
+      if (session?.token) {
+        headers['Authorization'] = `Bearer ${session.token}`;
+      }
+
       const res = await fetch(`/api/equipos/${equipoToDelete.id}`, {
         method: 'DELETE',
+        headers,
       });
       if (!res.ok) {
         const errJson = await res.json();
@@ -243,6 +297,13 @@ export default function App() {
     ])
   ).sort();
 
+  // Si no hay sesión iniciada, mostrar la pantalla de Login
+  if (!session) {
+    return <LoginView onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  const userRole = session.user.rol_nombre;
+
   return (
     <div className="min-h-screen bg-slate-100/60 text-slate-800 flex flex-col font-sans">
       {/* Toast Notification */}
@@ -255,22 +316,60 @@ export default function App() {
 
       {/* Header de la Aplicación */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-2xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-slate-900 text-white rounded-xl shadow-xs">
-                <Monitor className="w-6 h-6" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            {/* Logotipo y Pestañas de Navegación */}
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-slate-900 text-white rounded-xl shadow-xs">
+                  <Monitor className="w-5 h-5" />
+                </div>
+                <div>
+                  <h1 className="text-base font-bold text-slate-900 leading-tight">
+                    Inventario de Cómputo TI
+                  </h1>
+                  <p className="text-[11px] text-slate-500">
+                    Control All in One, Periféricos y Roles RBAC
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
-                  Inventario de Equipos All in One
-                </h1>
-                <p className="text-2xs sm:text-xs text-slate-500">
-                  Control de cómputo y periféricos (mouse, teclado y diadema) para auditoría interna
-                </p>
+
+              {/* Selector de Pestañas */}
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('inventario')}
+                  className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                    activeTab === 'inventario'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Monitor className="w-3.5 h-3.5" />
+                  <span>Inventario de Equipos</span>
+                </button>
+
+                {session.user.rol_nombre === 'ADMIN' && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('usuarios')}
+                    className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                      activeTab === 'usuarios'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-indigo-600'
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Usuarios y Roles</span>
+                    <span className="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.2 rounded font-bold">
+                      ADMIN
+                    </span>
+                  </button>
+                )}
               </div>
             </div>
 
+            {/* Controles de Estado, Exportación, Nuevo Equipo y Perfil */}
             <div className="flex flex-wrap items-center gap-2">
               {/* Botón de Validación de Base de Datos */}
               <button
@@ -297,21 +396,21 @@ export default function App() {
                 }`} />
                 <span>
                   {dbStatus?.status === 'connected'
-                    ? 'BD: MySQL Conectada'
+                    ? 'BD: MySQL'
                     : dbStatus?.status === 'error'
-                    ? 'BD: Error de Conexión'
-                    : 'BD: SQLite Local'}
+                    ? 'BD: Error'
+                    : 'BD: SQLite'}
                 </span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setIsSqlModalOpen(true)}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
                 title="Ver o descargar script relacional MariaDB / MySQL"
               >
                 <Database className="w-3.5 h-3.5 text-slate-600" />
-                Script MariaDB
+                <span className="hidden sm:inline">Script SQL</span>
               </button>
 
               {/* Menú de Exportación de Reportes: PDF, Excel, CSV */}
@@ -324,7 +423,7 @@ export default function App() {
                   title="Exportar reporte de auditoría en formatos PDF, Excel o CSV"
                 >
                   <FileDown className="w-3.5 h-3.5 text-slate-700" />
-                  <span>Exportar Reporte</span>
+                  <span>Exportar</span>
                   <ChevronDown className="w-3 h-3 text-slate-500" />
                 </button>
 
@@ -394,14 +493,55 @@ export default function App() {
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={openCreateModal}
-                className="px-3.5 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Nuevo Equipo All-in-One
-              </button>
+              {/* Botón de Nuevo Equipo (oculto para Calidad) */}
+              {userRole !== 'CALIDAD' && (
+                <button
+                  type="button"
+                  onClick={openCreateModal}
+                  className="px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Nuevo Equipo All-in-One</span>
+                  <span className="sm:hidden">Nuevo</span>
+                </button>
+              )}
+
+              {/* Pastilla de Perfil de Usuario y Logout */}
+              <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
+                <div
+                  className="flex items-center gap-2 bg-slate-50 border border-slate-200 py-1 px-2.5 rounded-xl"
+                  title={`Conectado como ${session.user.nombre_completo} (${session.user.username})`}
+                >
+                  <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white font-bold text-[11px] flex items-center justify-center uppercase shrink-0">
+                    {session.user.nombre_completo.charAt(0)}
+                  </div>
+                  <div className="text-left hidden md:block">
+                    <span className="text-xs font-bold text-slate-800 block leading-tight max-w-[110px] truncate">
+                      {session.user.nombre_completo}
+                    </span>
+                    <span
+                      className={`text-[9px] font-bold px-1.5 py-0.2 rounded-sm inline-block ${
+                        userRole === 'ADMIN'
+                          ? 'bg-rose-100 text-rose-800'
+                          : userRole === 'TECNICO'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                    >
+                      {userRole}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl border border-slate-200 transition cursor-pointer"
+                  title="Cerrar sesión"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -409,12 +549,60 @@ export default function App() {
 
       {/* Contenido Principal */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Resumen de Métricas */}
-        <StatsOverview
-          stats={stats}
-          onFilterStatus={(st) => setFiltroEstado(st)}
-          selectedStatus={filtroEstado}
-        />
+        {/* Renderizado condicional según la pestaña activa */}
+        {activeTab === 'usuarios' && session.user.rol_nombre === 'ADMIN' ? (
+          <UserManagementView
+            currentUser={session.user}
+            token={session.token}
+            onToast={showToast}
+          />
+        ) : (
+          <>
+            {/* Banner Informativo según Rol */}
+            {userRole === 'CALIDAD' && (
+              <div className="mb-5 p-4 bg-emerald-50/90 border border-emerald-200 rounded-2xl flex items-start gap-3 shadow-xs">
+                <div className="p-2 bg-emerald-600 text-white rounded-xl shrink-0 mt-0.5">
+                  <Eye className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-xs text-emerald-950 uppercase tracking-wide">
+                      Modo de Auditoría y Control de Calidad Activo (Solo Lectura)
+                    </span>
+                    <span className="text-[10px] bg-emerald-200 text-emerald-900 font-semibold px-2 py-0.5 rounded-full">
+                      Supervisor: {session.user.nombre_completo}
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
+                    Su cuenta dispone de acceso de supervisión para consultar la totalidad de equipos y periféricos, inspeccionar fichas técnicas individuales y exportar reportes consolidados (PDF, Excel XLSX y CSV). No tiene permisos para registrar, modificar o eliminar equipos.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {userRole === 'TECNICO' && (
+              <div className="mb-5 p-3.5 bg-blue-50/90 border border-blue-200 rounded-2xl flex items-center justify-between gap-3 shadow-xs text-xs text-blue-900">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 bg-blue-600 text-white rounded-lg shrink-0">
+                    <Wrench className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-blue-950">Perfil Técnico Operativo:</span>{' '}
+                    Habilitado para registrar nuevos equipos All in One, actualizar especificaciones y reasignar máquinas a custodios.
+                  </div>
+                </div>
+                <span className="text-[10px] bg-blue-200/80 text-blue-900 font-semibold px-2.5 py-1 rounded-lg shrink-0 hidden sm:inline-block">
+                  Borrado reservado para Administrador
+                </span>
+              </div>
+            )}
+
+            {/* Resumen de Métricas */}
+            <StatsOverview
+              stats={stats}
+              onFilterStatus={(st) => setFiltroEstado(st)}
+              selectedStatus={filtroEstado}
+            />
 
         {/* Barra de Búsqueda y Filtros */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs mb-5">
@@ -720,23 +908,33 @@ export default function App() {
                               <FileDown className="w-4 h-4" />
                             </button>
 
-                            <button
-                              type="button"
-                              onClick={() => openEditModal(equipo)}
-                              className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
-                              title="Editar equipo y periféricos"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
+                            {userRole !== 'CALIDAD' && (
+                              <button
+                                type="button"
+                                onClick={() => openEditModal(equipo)}
+                                className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+                                title="Editar equipo y periféricos / reasignar custodio"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                            )}
 
-                            <button
-                              type="button"
-                              onClick={() => openDeleteModal(equipo)}
-                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
-                              title="Eliminar equipo"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {userRole === 'ADMIN' && (
+                              <button
+                                type="button"
+                                onClick={() => openDeleteModal(equipo)}
+                                className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                                title="Eliminar equipo"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+
+                            {userRole === 'CALIDAD' && (
+                              <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded italic">
+                                Solo lectura
+                              </span>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -747,6 +945,8 @@ export default function App() {
             </div>
           )}
         </div>
+        </>
+        )}
       </main>
 
       {/* Footer informativo */}
@@ -756,7 +956,7 @@ export default function App() {
             Sistema de Inventario de Cómputo All-in-One • Base de Datos Relacional SQLite / MariaDB
           </span>
           <span className="text-slate-400">
-            Node.js Express REST API • Exportación oficial para Auditoría Interna TI
+            Node.js Express REST API • Control de Acceso RBAC (ADMIN, TÉCNICO, CALIDAD)
           </span>
         </div>
       </footer>
@@ -775,6 +975,7 @@ export default function App() {
         onClose={() => setIsDetailModalOpen(false)}
         onEdit={(eq) => openEditModal(eq)}
         onDelete={(eq) => openDeleteModal(eq)}
+        userRole={userRole}
       />
 
       <DeleteConfirmModal

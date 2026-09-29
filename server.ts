@@ -13,6 +13,23 @@ import {
   getDatabase,
 } from './server/db.ts';
 import { isMySQLConfigured, initMySQLTables, testMySQLConnection } from './server/mysql.ts';
+import {
+  getAllRolesMySQL,
+  getAllUsuariosMySQL,
+  getUsuarioByIdMySQL,
+  getUsuarioByUsernameOrEmailMySQL,
+  createUsuarioMySQL,
+  updateUsuarioMySQL,
+  deleteUsuarioMySQL,
+  updateUltimoLoginMySQL,
+} from './server/mysql.ts';
+import {
+  verifyPassword,
+  createToken,
+  authenticateToken,
+  requireRoles,
+  AuthenticatedRequest,
+} from './server/auth.ts';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -55,6 +72,214 @@ app.get('/api/db/status', async (req, res) => {
       message: 'Error al conectar con la base de datos MariaDB / MySQL externa.',
       error: testResult.error,
     });
+  }
+});
+
+// ==========================================
+// RUTAS DE AUTENTICACIÓN Y ROLES (MariaDB: app_usuarios + roles de schemaV2.sql)
+// ==========================================
+
+function requireMySQL(res: any): boolean {
+  if (!isMySQLConfigured()) {
+    res.status(503).json({ error: 'Autenticación no disponible: configure la base de datos MariaDB / MySQL.' });
+    return false;
+  }
+  return true;
+}
+
+// 1. Iniciar sesión (Login)
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    if (!requireMySQL(res)) return;
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Debe ingresar el usuario o correo y la contraseña.' });
+    }
+
+    const user = await getUsuarioByUsernameOrEmailMySQL(String(username));
+    if (!user) {
+      return res.status(401).json({ error: 'Credenciales inválidas. Verifique el usuario y la contraseña.' });
+    }
+
+    const isMatch = await verifyPassword(String(password), user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Credenciales inválidas. Verifique el usuario y la contraseña.' });
+    }
+
+    if (!user.activo) {
+      return res.status(403).json({
+        error: 'Esta cuenta se encuentra suspendida o inactiva. Contacte al Administrador del sistema.',
+      });
+    }
+
+    await updateUltimoLoginMySQL(user.id);
+
+    const token = createToken({
+      userId: user.id,
+      username: user.username,
+      rol: user.rol_nombre,
+    });
+
+    const safeUser = {
+      id: user.id,
+      rol_id: user.rol_id,
+      rol_nombre: user.rol_nombre,
+      rol_descripcion: user.rol_descripcion,
+      nombre_completo: user.nombre_completo,
+      username: user.username,
+      email: user.email,
+      activo: Boolean(user.activo),
+      ultimo_login: user.ultimo_login,
+      created_at: user.created_at,
+    };
+
+    res.json({
+      token,
+      user: safeUser,
+      message: `Bienvenido, ${safeUser.nombre_completo} (${safeUser.rol_nombre})`,
+    });
+  } catch (error: any) {
+    console.error('Error en login:', error);
+    res.status(500).json({ error: error.message || 'Error durante el inicio de sesión' });
+  }
+});
+
+// 2. Obtener datos del usuario autenticado actual
+app.get('/api/auth/me', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!requireMySQL(res)) return;
+    const user = await getUsuarioByIdMySQL(req.user!.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+    if (!user.activo) {
+      return res.status(403).json({ error: 'Su cuenta está inactiva' });
+    }
+    res.json(user);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Error al obtener sesión' });
+  }
+});
+
+// 3. Cerrar sesión (token stateless: el cliente lo descarta)
+app.post('/api/auth/logout', (req, res) => {
+  res.json({ success: true, message: 'Sesión finalizada exitosamente.' });
+});
+
+// 4. Listar todos los roles disponibles
+app.get('/api/roles', async (req, res) => {
+  try {
+    if (!requireMySQL(res)) return;
+    const roles = await getAllRolesMySQL();
+    res.json(roles);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Error al obtener roles' });
+  }
+});
+
+// ==========================================
+// GESTIÓN DE USUARIOS (RBAC - Solo Administrador)
+// ==========================================
+
+app.get('/api/usuarios', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!requireMySQL(res)) return;
+    const usuarios = await getAllUsuariosMySQL();
+    res.json(usuarios);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Error al consultar usuarios' });
+  }
+});
+
+app.post('/api/usuarios', authenticateToken, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!requireMySQL(res)) return;
+    const { rol_id, nombre_completo, username, email, password, activo } = req.body;
+    if (!rol_id || !nombre_completo || !username || !email || !password) {
+      return res.status(400).json({
+        error: 'Todos los campos son obligatorios: rol, nombre completo, username, email y contraseña inicial.',
+      });
+    }
+
+    if (password.length < 5) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 5 caracteres.' });
+    }
+
+    const nuevoUsuario = await createUsuarioMySQL({
+      rol_id: Number(rol_id),
+      nombre_completo,
+      username,
+      email,
+      password,
+      activo: activo !== false,
+    });
+
+    res.status(201).json(nuevoUsuario);
+  } catch (error: any) {
+    console.error('Error al crear usuario:', error);
+    res.status(400).json({ error: error.message || 'Error al registrar usuario' });
+  }
+});
+
+app.put('/api/usuarios/:id', authenticateToken, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!requireMySQL(res)) return;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID de usuario inválido' });
+
+    const { rol_id, nombre_completo, username, email, password, activo } = req.body;
+
+    const actualizado = await updateUsuarioMySQL(id, {
+      rol_id: rol_id !== undefined ? Number(rol_id) : undefined,
+      nombre_completo,
+      username,
+      email,
+      password: password && password.trim() ? password : undefined,
+      activo,
+    });
+
+    res.json(actualizado);
+  } catch (error: any) {
+    console.error('Error al actualizar usuario:', error);
+    res.status(400).json({ error: error.message || 'Error al actualizar usuario' });
+  }
+});
+
+app.post('/api/usuarios/:id/toggle-status', authenticateToken, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!requireMySQL(res)) return;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID de usuario inválido' });
+
+    if (req.user!.userId === id) {
+      return res.status(400).json({ error: 'No puede suspender su propia cuenta de administrador en uso.' });
+    }
+
+    const user = await getUsuarioByIdMySQL(id);
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    const updated = await updateUsuarioMySQL(id, { activo: !user.activo });
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Error al cambiar estado' });
+  }
+});
+
+app.delete('/api/usuarios/:id', authenticateToken, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!requireMySQL(res)) return;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID de usuario inválido' });
+
+    if (req.user!.userId === id) {
+      return res.status(400).json({ error: 'No puede eliminar su propia cuenta de administrador en sesión.' });
+    }
+
+    await deleteUsuarioMySQL(id);
+    res.json({ success: true, message: 'Usuario eliminado exitosamente del sistema' });
+  } catch (error: any) {
+    console.error('Error al eliminar usuario:', error);
+    res.status(500).json({ error: error.message || 'Error al eliminar usuario' });
   }
 });
 

@@ -27,6 +27,7 @@ interface EquipoDetailModalProps {
   onClose: () => void;
   onEdit: (equipo: EquipoAllInOne) => void;
   onDelete: (equipo: EquipoAllInOne) => void;
+  userRole?: string;
 }
 
 export const EquipoDetailModal: React.FC<EquipoDetailModalProps> = ({
@@ -35,6 +36,7 @@ export const EquipoDetailModal: React.FC<EquipoDetailModalProps> = ({
   onClose,
   onEdit,
   onDelete,
+  userRole,
 }) => {
   if (!isOpen || !equipo) return null;
 
@@ -261,22 +263,31 @@ export const EquipoDetailModal: React.FC<EquipoDetailModalProps> = ({
         {/* Pie con acciones */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onDelete(equipo)}
-              className="px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              Eliminar
-            </button>
-            <button
-              type="button"
-              onClick={() => onEdit(equipo)}
-              className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Edit className="w-3.5 h-3.5" />
-              Editar
-            </button>
+            {userRole === 'ADMIN' && (
+              <button
+                type="button"
+                onClick={() => onDelete(equipo)}
+                className="px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Eliminar
+              </button>
+            )}
+            {userRole !== 'CALIDAD' && (
+              <button
+                type="button"
+                onClick={() => onEdit(equipo)}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Edit className="w-3.5 h-3.5" />
+                Editar Datos
+              </button>
+            )}
+            {userRole === 'CALIDAD' && (
+              <span className="text-[11px] text-slate-400 italic">
+                Modo Auditoría (Solo Lectura)
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

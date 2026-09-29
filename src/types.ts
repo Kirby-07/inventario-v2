@@ -6,6 +6,32 @@ export type EstadoEquipo = 'Operativo' | 'En mantenimiento' | 'Dañado' | 'En bo
 
 export type TipoPeriferico = 'Mouse' | 'Teclado' | 'Diadema';
 
+export type UserRoleName = 'ADMIN' | 'TECNICO' | 'CALIDAD';
+
+export interface Rol {
+  id: number;
+  nombre: UserRoleName;
+  descripcion: string;
+}
+
+export interface AppUsuario {
+  id: number;
+  rol_id: number;
+  rol_nombre?: UserRoleName;
+  rol_descripcion?: string;
+  nombre_completo: string;
+  username: string;
+  email: string;
+  activo: boolean | number;
+  ultimo_login?: string | null;
+  created_at?: string;
+}
+
+export interface AuthSession {
+  token: string;
+  user: AppUsuario;
+}
+
 export interface Periferico {
   id?: number;
   equipo_id?: number;
