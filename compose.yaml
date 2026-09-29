@@ -1,0 +1,70 @@
+# =============================================================================
+# compose.yaml — despliegue Podman/Docker: app + MariaDB
+# Grupo Empresarial Dinámica S.A.S. | Gestión de Activos TI
+#
+# Uso en la VM (con Podman):
+#   1. Clonar el repo y copiar .env.example como .env con valores reales.
+#   2. podman compose up -d --build
+#   3. podman compose logs -f app
+# =============================================================================
+
+name: inventario-dinamica
+
+services:
+  # ------------------------------------------------------------------
+  # Base de datos MariaDB (esquema V2 creado automáticamente al inicio)
+  # ------------------------------------------------------------------
+  db:
+    image: docker.io/library/mariadb:11.4
+    container_name: inventario-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME:-inventario_computo}
+    volumes:
+      # Persistencia real de los datos (sobrevive a reinicios y actualizaciones)
+      - mariadb_data:/var/lib/mysql
+      # Inicializa el esquema relacional V2 solo la primera vez (volumen vacío).
+      # ":z" permite leer el archivo en hosts con SELinux; inocuo en otras distros.
+      - ./migrations/schemaV2.sql:/docker-entrypoint-initdb.d/01-schemaV2.sql:ro,z
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u root -p$$MARIADB_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - appnet
+
+  # ------------------------------------------------------------------
+  # Aplicación (frontend + API Express en un solo proceso, puerto 3001)
+  # ------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: inventario-app:1.0
+    container_name: inventario-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # Variables sensibles y de entorno (NO versionar el .env real)
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      # Dentro de compose, la BD se alcanza por el nombre del servicio
+      DB_HOST: db
+    ports:
+      - "${APP_PORT:-3001}:3001"
+    networks:
+      - appnet
+
+volumes:
+  mariadb_data:
+    name: inventario-mariadb-data
+
+networks:
+  appnet:
+    name: inventario-appnet

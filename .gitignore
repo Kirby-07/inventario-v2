@@ -5,6 +5,7 @@ coverage/
 .DS_Store
 *.log
 .env*
-.env.example
+# La plantilla SÍ se versiona (no contiene secretos reales)
+!.env.example
 .opencode
 

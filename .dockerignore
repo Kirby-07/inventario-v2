@@ -1,0 +1,11 @@
+# Archivos excluidos del contexto de construcción (podman build / docker build)
+node_modules/
+dist/
+.git/
+.opencode/
+data/
+*.log
+.env
+Dockerfile*
+dist-server/
+coverage/
