@@ -20,8 +20,8 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg my-auto max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
         {/* Encabezado */}
         <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-3">
@@ -29,8 +29,8 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
               status?.status === 'connected' 
                 ? 'bg-emerald-100 text-emerald-700' 
                 : status?.status === 'error' 
-                ? 'bg-rose-100 text-rose-700' 
-                : 'bg-indigo-100 text-indigo-700'
+                ? 'bg-dinamica-red/10 text-dinamica-darkred' 
+                : 'bg-dinamica-charcoal/10 text-dinamica-charcoal'
             }`}>
               <Database className="w-5 h-5" />
             </div>
@@ -39,7 +39,7 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
                 Estado de Conexión a Base de Datos
               </h2>
               <p className="text-xs text-slate-500">
-                Verificación de persistencia para Render / Aiven
+                Motor de persistencia del sistema
               </p>
             </div>
           </div>
@@ -53,7 +53,7 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
         </div>
 
         {/* Contenido principal */}
-        <div className="p-5 sm:p-6 space-y-5">
+        <div className="p-4 sm:p-6 space-y-5 overflow-y-auto">
           {/* Tarjeta de Estado Principal */}
           {isLoading ? (
             <div className="p-6 text-center border border-slate-200 rounded-xl bg-slate-50">
@@ -69,7 +69,7 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
                   ¡Conexión Exitosa con la Base de Datos Externa!
                 </p>
                 <p className="text-xs text-emerald-700 mt-0.5">
-                  El sistema está conectado a tu instancia MySQL / MariaDB en la nube. Todos los registros y modificaciones se guardan de forma permanente y no se perderán al reiniciar el servidor en Render.
+                  El sistema está conectado a la base de datos externa (MariaDB / MySQL). Todos los registros y modificaciones se guardan de forma permanente.
                 </p>
               </div>
             </div>
@@ -81,19 +81,19 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
                   No se pudo conectar a la Base de Datos Externa
                 </p>
                 <p className="text-xs text-rose-700 mt-0.5">
-                  {status.error || 'Revisa que las credenciales de Aiven/Render y el host estén activos.'}
+                  {status.error || 'Revisa que las credenciales y el host de la base de datos externa estén activos.'}
                 </p>
               </div>
             </div>
           ) : (
-            <div className="p-4 rounded-xl bg-indigo-50/80 border border-indigo-200 text-indigo-900 flex items-start gap-3">
-              <Server className="w-5 h-5 text-indigo-600 mt-0.5 shrink-0" />
+            <div className="p-4 rounded-xl bg-dinamica-charcoal/[0.04] border border-dinamica-charcoal/15 text-dinamica-charcoal flex items-start gap-3">
+              <Server className="w-5 h-5 mt-0.5 shrink-0" />
               <div>
-                <p className="text-sm font-bold text-indigo-950">
+                <p className="text-sm font-bold">
                   Modo Local SQLite Activo
                 </p>
-                <p className="text-xs text-indigo-700 mt-0.5">
-                  Actualmente no hay variables de base de datos externa configuradas en este contenedor. El sistema está funcionando con SQLite en memoria/disco local. Al desplegar en Render con tus variables de Aiven, pasará automáticamente a MySQL persistente.
+                <p className="text-xs opacity-80 mt-0.5">
+                  No hay una base de datos externa configurada. El sistema está funcionando con la base de datos local (SQLite).
                 </p>
               </div>
             </div>
@@ -113,12 +113,12 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
                 </span>
               </div>
               <div className="px-3.5 py-2.5 flex items-center justify-between">
-                <span className="text-slate-500 font-medium">Persistencia en Render:</span>
+                <span className="text-slate-500 font-medium">Persistencia de datos:</span>
                 <span className={`font-semibold flex items-center gap-1 ${
                   status?.isCloud ? 'text-emerald-700' : 'text-amber-700'
                 }`}>
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  {status?.isCloud ? 'Garantizada (Persistente)' : 'Temporal (Requiere DATABASE_URL en Render)'}
+                  {status?.isCloud ? 'Garantizada (base de datos externa)' : 'Temporal (solo base de datos local)'}
                 </span>
               </div>
               {status?.details && (
@@ -126,7 +126,7 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
                   <div className="px-3.5 py-2.5 flex items-center justify-between">
                     <span className="text-slate-500 font-medium">Host / Servidor:</span>
                     <span className="font-mono text-2xs text-slate-700 truncate max-w-[220px]">
-                      {status.details.host || 'Aiven Cloud'}
+                      {status.details.host || 'No disponible'}
                     </span>
                   </div>
                   <div className="px-3.5 py-2.5 flex items-center justify-between">
@@ -146,22 +146,15 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
             </div>
           </div>
 
-          {/* Guía Rápida para Render */}
+          {/* Nota administrativa */}
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 space-y-1.5">
             <p className="font-semibold text-slate-800 flex items-center gap-1.5">
-              <span>💡 ¿Cómo verificarlo una vez desplegado en Render?</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-dinamica-darkred" />
+              <span>Información restringida al rol Administrador</span>
             </p>
-            <ol className="list-decimal pl-4 space-y-1 text-slate-600 text-2xs sm:text-xs">
-              <li>
-                En tu servicio de Render, ve a la pestaña <strong>Environment</strong> y agrega <code className="bg-slate-200 px-1 py-0.5 rounded text-slate-800">DATABASE_URL</code> con tu URL de Aiven.
-              </li>
-              <li>
-                Haz clic en este mismo botón de <strong>"Estado BD"</strong> en la cabecera para ver la luz verde de conexión.
-              </li>
-              <li>
-                O abre directamente en tu navegador: <code className="bg-slate-200 px-1 py-0.5 rounded text-slate-800">https://tu-app.onrender.com/api/db/status</code>
-              </li>
-            </ol>
+            <p className="text-slate-600 text-2xs sm:text-xs">
+              El respaldo de la estructura y los datos puede descargarse desde el botón <strong>Script SQL</strong> de la cabecera. Comunique cualquier novedad de conectividad a la Dirección de Tecnología e Infraestructura.
+            </p>
           </div>
         </div>
 

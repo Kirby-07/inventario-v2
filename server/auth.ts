@@ -4,6 +4,12 @@ import { Request, Response, NextFunction } from 'express';
 
 const SECRET_KEY = process.env.JWT_SECRET || 'inventario_aio_super_secret_jwt_key_2026_xyz';
 
+if (!process.env.JWT_SECRET) {
+  console.warn(
+    '[auth] ⚠️  JWT_SECRET no está definido. Usando clave de desarrollo: DEFINA JWT_SECRET en el .env de producción.'
+  );
+}
+
 // --- Contraseñas con bcryptjs (schemaV2.sql: app_usuarios.password_hash) ---
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
@@ -104,4 +110,23 @@ export function requireRoles(...allowedRoles: string[]) {
 
     next();
   };
+}
+
+// ==========================================
+// Matriz RBAC de Equipos e Inventario
+// read:   cualquier rol autenticado (consulta y auditoría)
+// write:  ADMIN y TECNICO (registro, edición y reasignación)
+// delete: solo ADMIN (baja definitiva de activos)
+// ==========================================
+export type EquipoAction = 'read' | 'write' | 'delete';
+
+const EQUIPO_ROLE_MATRIX: Record<EquipoAction, string[]> = {
+  read: ['ADMIN', 'TECNICO', 'CALIDAD'],
+  write: ['ADMIN', 'TECNICO'],
+  delete: ['ADMIN'],
+};
+
+/** Middleware compuesto: exige sesión válida + rol permitido para la acción sobre equipos. */
+export function requireEquipoAccess(action: EquipoAction) {
+  return [authenticateToken, requireRoles(...EQUIPO_ROLE_MATRIX[action])];
 }

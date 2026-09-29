@@ -1,1 +1,19 @@
 @import "tailwindcss";
+
+@theme {
+  /* Paleta institucional — Grupo Empresarial Dinámica S.A.S. */
+  --color-dinamica-red: #E52427;
+  --color-dinamica-darkred: #8A151B;
+  --color-dinamica-charcoal: #2B2B2C;
+  --color-dinamica-gray: #D1D5DB;
+  --color-dinamica-surface: #F9FAFB;
+}
+
+body {
+  background-color: var(--color-dinamica-surface);
+}
+
+::selection {
+  background-color: var(--color-dinamica-darkred);
+  color: #ffffff;
+}

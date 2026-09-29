@@ -4,9 +4,10 @@ import { X, Download, Copy, Check, Database, Code } from 'lucide-react';
 interface SqlExportModalProps {
   isOpen: boolean;
   onClose: () => void;
+  token?: string;
 }
 
-export const SqlExportModal: React.FC<SqlExportModalProps> = ({ isOpen, onClose }) => {
+export const SqlExportModal: React.FC<SqlExportModalProps> = ({ isOpen, onClose, token }) => {
   const [sqlContent, setSqlContent] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -14,18 +15,24 @@ export const SqlExportModal: React.FC<SqlExportModalProps> = ({ isOpen, onClose 
   useEffect(() => {
     if (isOpen) {
       setIsLoading(true);
-      fetch('/api/export/mariadb.sql')
-        .then((res) => res.text())
-        .then((data) => {
+      fetch('/api/export/mariadb.sql', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      })
+        .then(async (res) => {
+          const data = await res.text();
+          if (!res.ok) {
+            throw new Error(data || 'Sin autorización para ver el script SQL.');
+          }
           setSqlContent(data);
           setIsLoading(false);
         })
         .catch((err) => {
           console.error('Error cargando script SQL:', err);
+          setSqlContent(`-- ${err.message || 'No se pudo cargar el script SQL.'}`);
           setIsLoading(false);
         });
     }
-  }, [isOpen]);
+  }, [isOpen, token]);
 
   if (!isOpen) return null;
 
@@ -48,8 +55,8 @@ export const SqlExportModal: React.FC<SqlExportModalProps> = ({ isOpen, onClose 
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl my-auto max-h-[90vh] flex flex-col border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70 rounded-t-2xl">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-slate-800 text-white rounded-lg">
@@ -72,11 +79,11 @@ export const SqlExportModal: React.FC<SqlExportModalProps> = ({ isOpen, onClose 
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 flex items-start gap-2">
-            <Code className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+          <div className="p-3 bg-dinamica-charcoal/[0.04] border border-dinamica-charcoal/15 rounded-xl text-xs text-dinamica-charcoal flex items-start gap-2">
+            <Code className="w-4 h-4 shrink-0 mt-0.5" />
             <div>
               <span className="font-semibold block mb-0.5">Estructura Relacional Normalizada:</span>
-              El sistema vincula la tabla principal <code className="bg-blue-100/70 px-1 py-0.5 rounded">equipos</code> con la tabla <code className="bg-blue-100/70 px-1 py-0.5 rounded">perifericos</code> mediante una clave foránea (<code className="bg-blue-100/70 px-1 py-0.5 rounded">FOREIGN KEY (equipo_id) REFERENCES equipos(id) ON DELETE CASCADE</code>).
+              El sistema vincula la tabla principal <code className="bg-dinamica-charcoal/10 px-1 py-0.5 rounded">equipos</code> con la tabla <code className="bg-dinamica-charcoal/10 px-1 py-0.5 rounded">perifericos</code> mediante una clave foránea (<code className="bg-dinamica-charcoal/10 px-1 py-0.5 rounded">FOREIGN KEY (equipo_id) REFERENCES equipos(id) ON DELETE CASCADE</code>).
             </div>
           </div>
 

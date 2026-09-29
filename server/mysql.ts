@@ -15,7 +15,7 @@ export function isMySQLConfigured(): boolean {
 export function getMySQLPool(): mysql.Pool {
   if (pool) return pool;
 
-  // 2. Priorizar los parámetros locales de Podman definidos en .env
+  // Priorizar los parámetros locales de Podman definidos en .env
   if (process.env.DB_HOST && process.env.DB_USER) {
     pool = mysql.createPool({
       host: process.env.DB_HOST,
@@ -28,7 +28,7 @@ export function getMySQLPool(): mysql.Pool {
       queueLimit: 0
     });
   } else if (process.env.DATABASE_URL) {
-    // Si se usa URL, en mysql2 se pasa la cadena directamente (no dentro de un objeto con { uri })
+    // Si se usa URL, en mysql2 se pasa la cadena directamente
     pool = mysql.createPool(process.env.DATABASE_URL);
   } else {
     throw new Error('No hay configuración de base de datos MySQL/MariaDB disponible.');
@@ -51,14 +51,14 @@ export async function testMySQLConnection(): Promise<{
     return {
       connected: true,
       version: rows[0]?.version || 'Desconocida',
-      database: rows[0]?.db || process.env.DB_NAME || 'defaultdb',
+      database: rows[0]?.db || process.env.DB_NAME || 'inventario_computo',
       current_user: rows[0]?.user || process.env.DB_USER,
-      host: process.env.DB_HOST || (process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL.replace('mysql://', 'http://')).hostname : 'cloud-db'),
+      host: process.env.DB_HOST || (process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL.replace('mysql://', 'http://')).hostname : '127.0.0.1'),
     };
   } catch (err: any) {
     return {
       connected: false,
-      error: err.message || 'Error al conectar con la base de datos externa',
+      error: err.message || 'Error al conectar con la base de datos MariaDB / MySQL',
     };
   }
 }
@@ -66,182 +66,26 @@ export async function testMySQLConnection(): Promise<{
 export async function initMySQLTables() {
   const p = getMySQLPool();
 
-  await p.query(`
-    CREATE TABLE IF NOT EXISTS equipos (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      numero_activo VARCHAR(100) NOT NULL UNIQUE,
-      marca VARCHAR(100) NOT NULL,
-      numero_serie VARCHAR(150) NOT NULL,
-      estado_actual ENUM('Operativo', 'En mantenimiento', 'Dañado', 'En bodega / Desuso') NOT NULL,
-      responsable VARCHAR(150) NOT NULL,
-      cc VARCHAR(50) NULL,
-      departamento VARCHAR(150) NOT NULL,
-      imagen_url LONGTEXT NULL,
-      notas TEXT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-  `);
-
-  // Migración segura si la tabla equipos ya existía sin la columna cc
   try {
-    const [cols]: any = await p.query("SHOW COLUMNS FROM equipos LIKE 'cc'");
-    if (cols.length === 0) {
-      await p.query("ALTER TABLE equipos ADD COLUMN cc VARCHAR(50) NULL AFTER responsable");
+    // Verificar que las tablas del esquema v2 estén presentes
+    const [tables]: any = await p.query("SHOW TABLES LIKE 'equipos'");
+    if (tables.length === 0) {
+      console.warn("⚠️ Advertencia: No se encontró la tabla 'equipos'. Asegúrate de ejecutar schemaV2.sql en MariaDB.");
+    } else {
+      console.log("Tablas de MariaDB / MySQL listas (Esquema v2 relacional verificado).");
     }
+
+    // Sembrar roles y usuarios administrativos base si no existen
+    await seedMySQLRolesAndUsers(p);
   } catch (err) {
-    console.warn('Nota sobre migración de columna cc:', err);
-  }
-
-  await p.query(`
-    CREATE TABLE IF NOT EXISTS perifericos (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      equipo_id INT NOT NULL,
-      tipo ENUM('Mouse', 'Teclado', 'Diadema') NOT NULL,
-      numero_activo VARCHAR(100) NOT NULL,
-      estado_actual ENUM('Operativo', 'En mantenimiento', 'Dañado', 'En bodega / Desuso') NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT fk_perifericos_equipo FOREIGN KEY (equipo_id) REFERENCES equipos(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-  `);
-
-  // Tablas de autenticación y roles (migrations/schemaV2.sql). No toca equipos/periféricos.
-  await p.query(`
-    CREATE TABLE IF NOT EXISTS roles (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      nombre VARCHAR(50) NOT NULL UNIQUE,
-      descripcion VARCHAR(255) NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-  `);
-
-  await p.query(`
-    CREATE TABLE IF NOT EXISTS app_usuarios (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      rol_id INT NOT NULL,
-      nombre_completo VARCHAR(150) NOT NULL,
-      username VARCHAR(50) NOT NULL UNIQUE,
-      email VARCHAR(150) NOT NULL UNIQUE,
-      password_hash VARCHAR(255) NOT NULL,
-      activo BOOLEAN NOT NULL DEFAULT TRUE,
-      ultimo_login DATETIME NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT fk_app_usuarios_rol FOREIGN KEY (rol_id) REFERENCES roles(id) ON UPDATE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-  `);
-
-  await seedMySQLRolesAndUsers(p);
-
-  // Sembrar datos de muestra si está vacía
-  const [rows]: any = await p.query('SELECT COUNT(*) as count FROM equipos');
-  if (rows[0].count === 0) {
-    await seedMySQLSampleData(p);
+    console.error("Error al validar las tablas en MariaDB:", err);
   }
 }
 
-async function seedMySQLSampleData(p: mysql.Pool) {
-  const sampleEquipos = [
-    {
-      equipo: {
-        numero_activo: 'ACT-PC-1001',
-        marca: 'HP',
-        numero_serie: 'HP-AIO-8849201',
-        estado_actual: 'Operativo',
-        responsable: 'Carlos Andrés Mendoza',
-        cc: '1098765432',
-        departamento: 'Sistemas e Infraestructura',
-        imagen_url: '',
-        notas: 'Ubicado en el puesto A-12. Asignado en auditoría Q1.',
-      },
-      perifericos: [
-        { tipo: 'Mouse', numero_activo: 'ACT-MOU-2001', estado_actual: 'Operativo' },
-        { tipo: 'Teclado', numero_activo: 'ACT-TEC-3001', estado_actual: 'Operativo' },
-        { tipo: 'Diadema', numero_activo: 'ACT-DIA-4001', estado_actual: 'Operativo' },
-      ],
-    },
-    {
-      equipo: {
-        numero_activo: 'ACT-PC-1002',
-        marca: 'Lenovo',
-        numero_serie: 'LN-AIO-3319082',
-        estado_actual: 'Operativo',
-        responsable: 'Mariana Gómez Sánchez',
-        cc: '1014234567',
-        departamento: 'Contabilidad y Finanzas',
-        imagen_url: '',
-        notas: 'Equipo principal de tesorería y nómina.',
-      },
-      perifericos: [
-        { tipo: 'Mouse', numero_activo: 'ACT-MOU-2002', estado_actual: 'Operativo' },
-        { tipo: 'Teclado', numero_activo: 'ACT-TEC-3002', estado_actual: 'Operativo' },
-        { tipo: 'Diadema', numero_activo: 'ACT-DIA-4002', estado_actual: 'Operativo' },
-      ],
-    },
-    {
-      equipo: {
-        numero_activo: 'ACT-PC-1003',
-        marca: 'Dell',
-        numero_serie: 'DL-OPT-7740219',
-        estado_actual: 'En mantenimiento',
-        responsable: 'Laura Vanessa Rivas',
-        departamento: 'Recursos Humanos',
-        imagen_url: '',
-        notas: 'En soporte por revisión de pantalla All-In-One.',
-      },
-      perifericos: [
-        { tipo: 'Mouse', numero_activo: 'ACT-MOU-2003', estado_actual: 'Operativo' },
-        { tipo: 'Teclado', numero_activo: 'ACT-TEC-3003', estado_actual: 'En mantenimiento' },
-        { tipo: 'Diadema', numero_activo: 'ACT-DIA-4003', estado_actual: 'Operativo' },
-      ],
-    },
-    {
-      equipo: {
-        numero_activo: 'ACT-PC-1004',
-        marca: 'Dell',
-        numero_serie: 'DL-OPT-9938122',
-        estado_actual: 'Operativo',
-        responsable: 'Javier Restrepo',
-        departamento: 'Comercial y Ventas',
-        imagen_url: '',
-        notas: 'Piso 2 Sala de Ventas. Equipo All-in-One en óptimo estado.',
-      },
-      perifericos: [
-        { tipo: 'Mouse', numero_activo: 'ACT-MOU-2004', estado_actual: 'Operativo' },
-        { tipo: 'Teclado', numero_activo: 'ACT-TEC-3004', estado_actual: 'Operativo' },
-        { tipo: 'Diadema', numero_activo: 'ACT-DIA-4004', estado_actual: 'Operativo' },
-      ],
-    },
-  ];
+// ==========================================
+// CONSULTAS DE EQUIPOS (ESQUEMA V2 CON JOINS)
+// ==========================================
 
-  for (const item of sampleEquipos) {
-    const [result]: any = await p.query(
-      `INSERT INTO equipos (numero_activo, marca, numero_serie, estado_actual, responsable, cc, departamento, imagen_url, notas)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        item.equipo.numero_activo,
-        item.equipo.marca,
-        item.equipo.numero_serie,
-        item.equipo.estado_actual,
-        item.equipo.responsable,
-        item.equipo.cc || '',
-        item.equipo.departamento,
-        item.equipo.imagen_url || '',
-        item.equipo.notas || '',
-      ]
-    );
-
-    const equipoId = result.insertId;
-    for (const per of item.perifericos) {
-      await p.query(
-        `INSERT INTO perifericos (equipo_id, tipo, numero_activo, estado_actual)
-         VALUES (?, ?, ?, ?)`,
-        [equipoId, per.tipo, per.numero_activo, per.estado_actual]
-      );
-    }
-  }
-}
 export async function getAllEquiposMySQL(filters?: {
   search?: string;
   departamento?: string;
@@ -249,7 +93,6 @@ export async function getAllEquiposMySQL(filters?: {
 }): Promise<EquipoAllInOne[]> {
   const p = getMySQLPool();
   
-  // Consulta relacional v2 con JOINs a custodios y departamentos
   let query = `
     SELECT 
       e.id,
@@ -298,7 +141,6 @@ export async function getAllEquiposMySQL(filters?: {
 
   const [equipos]: any = await p.query(query, params);
 
-  // Mapear periféricos con el alias de estado_periferico -> estado_actual
   for (const eq of equipos) {
     const [perifs]: any = await p.query(
       `SELECT 
@@ -362,6 +204,62 @@ export async function getEquipoByIdMySQL(id: number): Promise<EquipoAllInOne | n
   equipo.perifericos = perifs;
   return equipo;
 }
+
+// Función auxiliar para resolver o crear el custodio en el esquema v2
+async function resolverCustodioId(
+  p: mysql.Pool,
+  responsable?: string,
+  cc?: string,
+  departamento?: string
+): Promise<number | null> {
+  const resp = (responsable || '').trim();
+  if (!resp || resp === 'Sin custodio asignado' || resp.toLowerCase().includes('bodega')) {
+    return null;
+  }
+
+  const cedula = (cc || '').trim() || `GEN-${Date.now()}`;
+
+  // 1. Buscar si ya existe por cédula
+  if (cc && cc.trim()) {
+    const [exist]: any = await p.query(
+      'SELECT id FROM empleados_custodios WHERE cedula_ciudadania = ? LIMIT 1',
+      [cc.trim()]
+    );
+    if (exist.length > 0) return exist[0].id;
+  }
+
+  // 2. Resolver departamento
+  let deptId = 1;
+  const deptNom = (departamento || 'Tecnología y Sistemas').trim();
+  const [deptRows]: any = await p.query(
+    'SELECT id FROM departamentos WHERE nombre = ? LIMIT 1',
+    [deptNom]
+  );
+  if (deptRows.length > 0) {
+    deptId = deptRows[0].id;
+  } else {
+    const [deptIns]: any = await p.query(
+      'INSERT INTO departamentos (nombre, codigo) VALUES (?, ?)',
+      [deptNom, `DEP-${Date.now().toString().slice(-4)}`]
+    );
+    deptId = deptIns.insertId;
+  }
+
+  // 3. Separar nombres y apellidos
+  const nombres = resp.split(' ')[0] || resp;
+  const apellidos = resp.indexOf(' ') > 0 ? resp.substring(resp.indexOf(' ') + 1) : 'No Registra';
+
+  // 4. Crear empleado custodio
+  const [custodioIns]: any = await p.query(
+    `INSERT INTO empleados_custodios 
+      (cedula_ciudadania, nombres, apellidos, cargo, departamento_id, estado_laboral)
+     VALUES (?, ?, ?, 'Usuario Operativo', ?, 'Activo')`,
+    [cedula, nombres, apellidos, deptId]
+  );
+
+  return custodioIns.insertId;
+}
+
 export async function createEquipoMySQL(data: {
   numero_activo: string;
   marca: string;
@@ -387,23 +285,37 @@ export async function createEquipoMySQL(data: {
     throw new Error(`El número de activo '${data.numero_activo}' ya está registrado.`);
   }
 
+  // Resolver ID de custodio en esquema v2
+  const custodioId = await resolverCustodioId(p, data.responsable, data.cc, data.departamento);
+
   const [res]: any = await p.query(
-    `INSERT INTO equipos (numero_activo, marca, numero_serie, estado_actual, responsable, cc, departamento, imagen_url, notas)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO equipos 
+      (numero_activo, marca, numero_serie, estado_equipo, empleado_custodio_id, imagen_url, notas)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
       data.numero_activo.trim(),
       data.marca.trim(),
       data.numero_serie.trim(),
-      data.estado_actual,
-      data.responsable.trim(),
-      (data.cc || '').trim(),
-      data.departamento.trim(),
+      data.estado_actual || 'Operativo',
+      custodioId,
       data.imagen_url || '',
       data.notas || '',
     ]
   );
 
   const newId = res.insertId;
+
+  // Registrar en historial inicial de asignaciones si tiene custodio
+  if (custodioId) {
+    await p.query(
+      `INSERT INTO historial_asignaciones 
+        (equipo_id, empleado_anterior_id, empleado_nuevo_id, usuario_operador_id, motivo)
+       VALUES (?, NULL, ?, 1, 'Registro inicial del equipo en inventario')`,
+      [newId, custodioId]
+    );
+  }
+
+  // Guardar periféricos con estado_periferico de v2
   const tipos: Array<'Mouse' | 'Teclado' | 'Diadema'> = ['Mouse', 'Teclado', 'Diadema'];
   const perifsToSave = data.perifericos && data.perifericos.length > 0
     ? data.perifericos
@@ -415,7 +327,7 @@ export async function createEquipoMySQL(data: {
 
   for (const item of perifsToSave) {
     await p.query(
-      `INSERT INTO perifericos (equipo_id, tipo, numero_activo, estado_actual)
+      `INSERT INTO perifericos (equipo_id, tipo, numero_activo, estado_periferico)
        VALUES (?, ?, ?, ?)`,
       [newId, item.tipo, (item.numero_activo || '').trim(), item.estado_actual || data.estado_actual]
     );
@@ -454,32 +366,50 @@ export async function updateEquipoMySQL(
     throw new Error(`El número de activo '${data.numero_activo}' ya pertenece a otro equipo.`);
   }
 
+  const [current]: any = await p.query(
+    'SELECT empleado_custodio_id FROM equipos WHERE id = ?',
+    [id]
+  );
+  const antiguoCustodioId = current.length > 0 ? current[0].empleado_custodio_id : null;
+
+  // Resolver nuevo custodio si cambió
+  const nuevoCustodioId = await resolverCustodioId(p, data.responsable, data.cc, data.departamento);
+
   await p.query(
     `UPDATE equipos 
-     SET numero_activo = ?, marca = ?, numero_serie = ?, estado_actual = ?,
-         responsable = ?, cc = ?, departamento = ?, imagen_url = ?, notas = ?
+     SET numero_activo = ?, marca = ?, numero_serie = ?, estado_equipo = ?,
+         empleado_custodio_id = ?, imagen_url = ?, notas = ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`,
     [
       data.numero_activo.trim(),
       data.marca.trim(),
       data.numero_serie.trim(),
-      data.estado_actual,
-      data.responsable.trim(),
-      (data.cc || '').trim(),
-      data.departamento.trim(),
+      data.estado_actual || 'Operativo',
+      nuevoCustodioId,
       data.imagen_url !== undefined ? data.imagen_url : '',
       data.notas !== undefined ? data.notas : '',
       id,
     ]
   );
 
+  // Registrar reasignación en el historial si cambió de custodio
+  if (nuevoCustodioId && antiguoCustodioId !== nuevoCustodioId) {
+    await p.query(
+      `INSERT INTO historial_asignaciones 
+        (equipo_id, empleado_anterior_id, empleado_nuevo_id, usuario_operador_id, motivo)
+       VALUES (?, ?, ?, 1, 'Reasignación de equipo desde interfaz administrativa')`,
+      [id, antiguoCustodioId, nuevoCustodioId]
+    );
+  }
+
+  // Actualizar periféricos
   if (data.perifericos && data.perifericos.length > 0) {
     await p.query('DELETE FROM perifericos WHERE equipo_id = ?', [id]);
     for (const item of data.perifericos) {
       await p.query(
-        `INSERT INTO perifericos (equipo_id, tipo, numero_activo, estado_actual)
+        `INSERT INTO perifericos (equipo_id, tipo, numero_activo, estado_periferico)
          VALUES (?, ?, ?, ?)`,
-        [id, item.tipo, (item.numero_activo || '').trim(), item.estado_actual]
+        [id, item.tipo, (item.numero_activo || '').trim(), item.estado_actual || data.estado_actual]
       );
     }
   }
@@ -495,13 +425,13 @@ export async function deleteEquipoMySQL(id: number): Promise<boolean> {
   await p.query('DELETE FROM equipos WHERE id = ?', [id]);
   return true;
 }
+
 export async function getInventoryStatsMySQL(): Promise<InventoryStats> {
   const p = getMySQLPool();
 
   const [tot]: any = await p.query('SELECT COUNT(*) as count FROM equipos');
   const totalEquipos = tot[0]?.count || 0;
 
-  // Consulta por estado_equipo de v2
   const [estados]: any = await p.query(`
     SELECT estado_equipo, COUNT(*) as count 
     FROM equipos 
@@ -525,7 +455,6 @@ export async function getInventoryStatsMySQL(): Promise<InventoryStats> {
   const [perTot]: any = await p.query('SELECT COUNT(*) as count FROM perifericos');
   const totalPerifericos = perTot[0]?.count || 0;
 
-  // Conteo de departamentos a través de las relaciones de v2
   const [depts]: any = await p.query(`
     SELECT COALESCE(d.nombre, 'Sin departamento') as departamento, COUNT(e.id) as count 
     FROM equipos e
@@ -561,7 +490,7 @@ export async function getInventoryStatsMySQL(): Promise<InventoryStats> {
 }
 
 // ==========================================
-// AUTENTICACIÓN Y ROLES (tablas app_usuarios y roles de migrations/schemaV2.sql)
+// AUTENTICACIÓN Y ROLES (V2)
 // ==========================================
 
 async function seedMySQLRolesAndUsers(p: mysql.Pool) {
@@ -637,6 +566,9 @@ export async function getUsuarioByUsernameOrEmailMySQL(identifier: string): Prom
   if (rows.length === 0) return null;
   return rows[0];
 }
+
+// Alias de compatibilidad para endpoints de autenticación en server.ts
+export const getUsuarioByLogin = getUsuarioByUsernameOrEmailMySQL;
 
 export async function createUsuarioMySQL(data: {
   rol_id: number;

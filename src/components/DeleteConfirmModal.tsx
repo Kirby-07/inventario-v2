@@ -20,8 +20,8 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
   if (!isOpen || !equipo) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md my-auto max-h-[92vh] overflow-y-auto p-5 sm:p-6 border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
         <div className="flex items-center gap-3 text-rose-600 mb-3">
           <div className="p-2.5 bg-rose-50 rounded-xl">
             <AlertTriangle className="w-6 h-6" />

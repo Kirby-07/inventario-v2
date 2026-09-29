@@ -109,18 +109,18 @@ export function UserFormModal({
       case 'ADMIN':
         return {
           icon: ShieldCheck,
-          badgeColor: 'bg-rose-100 text-rose-800 border-rose-200',
-          selectedBorder: 'border-rose-500 bg-rose-50/50 ring-2 ring-rose-500/20',
-          hoverBorder: 'hover:border-rose-300',
+          badgeColor: 'bg-dinamica-darkred/10 text-dinamica-darkred border-dinamica-darkred/25',
+          selectedBorder: 'border-dinamica-darkred bg-dinamica-red/[0.04] ring-2 ring-dinamica-darkred/20',
+          hoverBorder: 'hover:border-dinamica-red/50',
           tag: 'Control Total',
           permissions: 'Usuarios, roles, borrado y modificación total',
         };
       case 'TECNICO':
         return {
           icon: Wrench,
-          badgeColor: 'bg-blue-100 text-blue-800 border-blue-200',
-          selectedBorder: 'border-blue-500 bg-blue-50/50 ring-2 ring-blue-500/20',
-          hoverBorder: 'hover:border-blue-300',
+          badgeColor: 'bg-dinamica-charcoal/10 text-dinamica-charcoal border-dinamica-charcoal/25',
+          selectedBorder: 'border-dinamica-charcoal bg-dinamica-charcoal/[0.04] ring-2 ring-dinamica-charcoal/20',
+          hoverBorder: 'hover:border-dinamica-charcoal/40',
           tag: 'Gestión Operativa',
           permissions: 'Alta, edición y reasignación de equipos (sin borrado)',
         };
@@ -140,9 +140,9 @@ export function UserFormModal({
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200 my-8">
         {/* Header */}
-        <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div className="px-6 py-4 bg-dinamica-charcoal text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-indigo-600 rounded-xl text-white">
+            <div className="p-2 bg-dinamica-red rounded-xl text-white">
               <Shield className="w-5 h-5" />
             </div>
             <div>
@@ -190,7 +190,7 @@ export function UserFormModal({
                   placeholder="ej. Juan Andrés Rivera"
                   value={nombreCompleto}
                   onChange={(e) => setNombreCompleto(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-dinamica-red focus:bg-white transition"
                 />
               </div>
             </div>
@@ -209,7 +209,7 @@ export function UserFormModal({
                   placeholder="ej. jrivera"
                   value={username}
                   onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
-                  className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
+                  className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-dinamica-red focus:bg-white transition"
                 />
               </div>
             </div>
@@ -226,7 +226,7 @@ export function UserFormModal({
                   placeholder="ej. jrivera@empresa.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-dinamica-red focus:bg-white transition"
                 />
               </div>
             </div>
@@ -242,7 +242,7 @@ export function UserFormModal({
                   placeholder={editingUser ? 'Dejar en blanco para no cambiar' : 'Mínimo 5 caracteres'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-dinamica-red focus:bg-white transition"
                 />
               </div>
             </div>
@@ -275,9 +275,9 @@ export function UserFormModal({
                           <IconComponent
                             className={`w-4 h-4 ${
                               r.nombre === 'ADMIN'
-                                ? 'text-rose-600'
+                                ? 'text-dinamica-red'
                                 : r.nombre === 'TECNICO'
-                                ? 'text-blue-600'
+                                ? 'text-dinamica-charcoal'
                                 : 'text-emerald-600'
                             }`}
                           />
@@ -286,7 +286,7 @@ export function UserFormModal({
                         <div
                           className={`w-4 h-4 rounded-full border flex items-center justify-center ${
                             isSelected
-                              ? 'border-indigo-600 bg-indigo-600 text-white'
+                              ? 'border-dinamica-darkred bg-dinamica-red text-white'
                               : 'border-slate-300 bg-white'
                           }`}
                         >
@@ -338,10 +338,10 @@ export function UserFormModal({
             <button
               type="button"
               onClick={() => setActivo(!activo)}
-              className="text-slate-600 hover:text-indigo-600 transition cursor-pointer"
+              className="text-slate-600 hover:text-dinamica-darkred transition cursor-pointer"
             >
               {activo ? (
-                <ToggleRight className="w-7 h-7 text-indigo-600" />
+                <ToggleRight className="w-7 h-7 text-dinamica-darkred" />
               ) : (
                 <ToggleLeft className="w-7 h-7 text-slate-400" />
               )}
@@ -361,7 +361,7 @@ export function UserFormModal({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              className="px-5 py-2 text-xs font-semibold text-white bg-dinamica-red rounded-xl hover:bg-dinamica-darkred shadow-md shadow-dinamica-red/20 transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {isSubmitting ? (
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />

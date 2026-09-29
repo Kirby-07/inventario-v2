@@ -13,6 +13,7 @@ import { SqlExportModal } from './components/SqlExportModal.tsx';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal.tsx';
 import { LoginView } from './components/LoginView.tsx';
 import { UserManagementView } from './components/UserManagementView.tsx';
+import { DinamicaLogo } from './components/DinamicaLogo.tsx';
 import { generateConsolidatedInventoryPdf, generateIndividualAuditPdf } from './utils/pdfGenerator.ts';
 import { exportInventoryToXLSX, exportInventoryToCSV } from './utils/excelExporter.ts';
 import {
@@ -99,10 +100,14 @@ export default function App() {
     }, 3500);
   };
 
+  // Estado del motor de BD — solo ADMIN (el backend exige rol ADMIN en /api/db/status)
   const fetchDbStatus = useCallback(async () => {
+    if (session?.user.rol_nombre !== 'ADMIN' || !session?.token) return;
     setIsCheckingDb(true);
     try {
-      const res = await fetch('/api/db/status');
+      const res = await fetch('/api/db/status', {
+        headers: { 'Authorization': `Bearer ${session.token}` },
+      });
       const data = await res.json();
       setDbStatus(data);
     } catch (err: any) {
@@ -116,21 +121,26 @@ export default function App() {
     } finally {
       setIsCheckingDb(false);
     }
-  }, []);
+  }, [session?.user.rol_nombre, session?.token]);
 
-  // Carga de datos desde la API Express
+  // Carga de datos desde la API Express (endpoints protegidos: se envía el token de sesión)
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
+      const headers: Record<string, string> = {};
+      if (session?.token) {
+        headers['Authorization'] = `Bearer ${session.token}`;
+      }
+
       const params = new URLSearchParams();
       if (searchTerm) params.append('search', searchTerm);
       if (filtroDepartamento !== 'Todos') params.append('departamento', filtroDepartamento);
       if (filtroEstado !== 'Todos') params.append('estado', filtroEstado);
 
       const [equiposRes, statsRes] = await Promise.all([
-        fetch(`/api/equipos?${params.toString()}`),
-        fetch('/api/stats'),
+        fetch(`/api/equipos?${params.toString()}`, { headers }),
+        fetch('/api/stats', { headers }),
       ]);
 
       if (!equiposRes.ok) throw new Error('Error al consultar lista de equipos.');
@@ -147,7 +157,7 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [searchTerm, filtroDepartamento, filtroEstado]);
+  }, [searchTerm, filtroDepartamento, filtroEstado, session?.token]);
 
   useEffect(() => {
     fetchData();
@@ -308,7 +318,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-100/60 text-slate-800 flex flex-col font-sans">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-4 right-4 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-2.5 text-xs font-medium border border-slate-700 animate-in fade-in slide-in-from-top-4 duration-200">
+        <div className="fixed top-4 right-4 left-4 sm:left-auto z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-2.5 text-xs font-medium border border-slate-700 animate-in fade-in slide-in-from-top-4 duration-200">
           <Check className="w-4 h-4 text-emerald-400" />
           <span>{toastMessage}</span>
         </div>
@@ -321,15 +331,15 @@ export default function App() {
             {/* Logotipo y Pestañas de Navegación */}
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-slate-900 text-white rounded-xl shadow-xs">
-                  <Monitor className="w-5 h-5" />
+                <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-1">
+                  <DinamicaLogo className="w-9 h-9" />
                 </div>
                 <div>
-                  <h1 className="text-base font-bold text-slate-900 leading-tight">
-                    Inventario de Cómputo TI
+                  <h1 className="text-base font-bold text-slate-900 leading-tight tracking-tight">
+                    Grupo Empresarial Dinámica S.A.S.
                   </h1>
-                  <p className="text-[11px] text-slate-500">
-                    Control All in One, Periféricos y Roles RBAC
+                  <p className="text-[10px] text-slate-500 leading-tight">
+                    Dirección de Tecnología e Infraestructura | Sistema de Control y Auditoría de Equipos
                   </p>
                 </div>
               </div>
@@ -355,13 +365,13 @@ export default function App() {
                     onClick={() => setActiveTab('usuarios')}
                     className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
                       activeTab === 'usuarios'
-                        ? 'bg-white text-indigo-700 shadow-xs'
-                        : 'text-slate-600 hover:text-indigo-600'
+                        ? 'bg-white text-dinamica-darkred shadow-xs'
+                        : 'text-slate-600 hover:text-dinamica-darkred'
                     }`}
                   >
                     <Users className="w-3.5 h-3.5" />
                     <span>Usuarios y Roles</span>
-                    <span className="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.2 rounded font-bold">
+                    <span className="text-[10px] bg-dinamica-darkred/10 text-dinamica-darkred px-1.5 py-0.2 rounded font-bold">
                       ADMIN
                     </span>
                   </button>
@@ -371,6 +381,9 @@ export default function App() {
 
             {/* Controles de Estado, Exportación, Nuevo Equipo y Perfil */}
             <div className="flex flex-wrap items-center gap-2">
+              {/* Botones de infraestructura — visibles solo para ADMIN */}
+              {userRole === 'ADMIN' && (
+                <>
               {/* Botón de Validación de Base de Datos */}
               <button
                 type="button"
@@ -383,16 +396,16 @@ export default function App() {
                     ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
                     : dbStatus?.status === 'error'
                     ? 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
-                    : 'bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100'
+                    : 'bg-dinamica-charcoal/5 text-dinamica-charcoal border-dinamica-charcoal/20 hover:bg-dinamica-charcoal/10'
                 }`}
-                title="Comprobar estado de conexión con la base de datos (Aiven / SQLite)"
+                title="Comprobar estado de conexión con la base de datos (MariaDB / SQLite)"
               >
                 <span className={`w-2 h-2 rounded-full shrink-0 ${
                   dbStatus?.status === 'connected'
                     ? 'bg-emerald-500 animate-pulse'
                     : dbStatus?.status === 'error'
-                    ? 'bg-rose-500'
-                    : 'bg-indigo-500'
+                    ? 'bg-dinamica-red'
+                    : 'bg-dinamica-charcoal'
                 }`} />
                 <span>
                   {dbStatus?.status === 'connected'
@@ -412,6 +425,8 @@ export default function App() {
                 <Database className="w-3.5 h-3.5 text-slate-600" />
                 <span className="hidden sm:inline">Script SQL</span>
               </button>
+                </>
+              )}
 
               {/* Menú de Exportación de Reportes: PDF, Excel, CSV */}
               <div className="relative">
@@ -478,9 +493,9 @@ export default function App() {
                           setIsExportDropdownOpen(false);
                           handleExportCsv();
                         }}
-                        className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-sky-50/60 flex items-center gap-2.5 transition-colors"
+                        className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 flex items-center gap-2.5 transition-colors"
                       >
-                        <div className="p-1 rounded-md bg-sky-50 text-sky-700 border border-sky-200">
+                        <div className="p-1 rounded-md bg-dinamica-charcoal/5 text-dinamica-charcoal border border-dinamica-charcoal/15">
                           <FileSpreadsheet className="w-3.5 h-3.5" />
                         </div>
                         <div>
@@ -498,7 +513,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={openCreateModal}
-                  className="px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  className="px-3 py-1.5 text-xs font-semibold text-white bg-dinamica-red hover:bg-dinamica-darkred rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Nuevo Equipo All-in-One</span>
@@ -512,7 +527,7 @@ export default function App() {
                   className="flex items-center gap-2 bg-slate-50 border border-slate-200 py-1 px-2.5 rounded-xl"
                   title={`Conectado como ${session.user.nombre_completo} (${session.user.username})`}
                 >
-                  <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white font-bold text-[11px] flex items-center justify-center uppercase shrink-0">
+                  <div className="w-6 h-6 rounded-lg bg-dinamica-darkred text-white font-bold text-[11px] flex items-center justify-center uppercase shrink-0">
                     {session.user.nombre_completo.charAt(0)}
                   </div>
                   <div className="text-left hidden md:block">
@@ -520,12 +535,12 @@ export default function App() {
                       {session.user.nombre_completo}
                     </span>
                     <span
-                      className={`text-[9px] font-bold px-1.5 py-0.2 rounded-sm inline-block ${
+                      className={`text-[9px] font-bold px-1.5 py-0.2 rounded-sm inline-block border ${
                         userRole === 'ADMIN'
-                          ? 'bg-rose-100 text-rose-800'
+                          ? 'bg-dinamica-darkred/10 text-dinamica-darkred border-dinamica-darkred/20'
                           : userRole === 'TECNICO'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-emerald-100 text-emerald-800'
+                          ? 'bg-dinamica-charcoal/10 text-dinamica-charcoal border-dinamica-charcoal/20'
+                          : 'bg-emerald-100 text-emerald-800 border-emerald-200'
                       }`}
                     >
                       {userRole}
@@ -549,7 +564,7 @@ export default function App() {
 
       {/* Contenido Principal */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Renderizado condicional según la pestaña activa */}
+        {/* Vista condicional según la pestaña activa */}
         {activeTab === 'usuarios' && session.user.rol_nombre === 'ADMIN' ? (
           <UserManagementView
             currentUser={session.user}
@@ -581,17 +596,17 @@ export default function App() {
             )}
 
             {userRole === 'TECNICO' && (
-              <div className="mb-5 p-3.5 bg-blue-50/90 border border-blue-200 rounded-2xl flex items-center justify-between gap-3 shadow-xs text-xs text-blue-900">
+              <div className="mb-5 p-3.5 bg-dinamica-charcoal/[0.04] border border-dinamica-charcoal/15 rounded-2xl flex items-center justify-between gap-3 shadow-xs text-xs text-dinamica-charcoal">
                 <div className="flex items-center gap-2.5">
-                  <div className="p-1.5 bg-blue-600 text-white rounded-lg shrink-0">
+                  <div className="p-1.5 bg-dinamica-charcoal text-white rounded-lg shrink-0">
                     <Wrench className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="font-bold text-blue-950">Perfil Técnico Operativo:</span>{' '}
+                    <span className="font-bold">Perfil Técnico Operativo:</span>{' '}
                     Habilitado para registrar nuevos equipos All in One, actualizar especificaciones y reasignar máquinas a custodios.
                   </div>
                 </div>
-                <span className="text-[10px] bg-blue-200/80 text-blue-900 font-semibold px-2.5 py-1 rounded-lg shrink-0 hidden sm:inline-block">
+                <span className="text-[10px] bg-dinamica-charcoal/10 font-semibold px-2.5 py-1 rounded-lg shrink-0 hidden sm:inline-block">
                   Borrado reservado para Administrador
                 </span>
               </div>
@@ -615,7 +630,7 @@ export default function App() {
                 placeholder="Buscar por activo, marca, número de serie, responsable o departamento..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50/70 border border-slate-200 rounded-lg focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-800"
+                className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50/70 border border-slate-200 rounded-lg focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-dinamica-red"
               />
             </div>
 
@@ -624,7 +639,7 @@ export default function App() {
               <select
                 value={filtroDepartamento}
                 onChange={(e) => setFiltroDepartamento(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50/70 border border-slate-200 rounded-lg focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-800 cursor-pointer"
+                className="w-full px-3 py-2 text-xs bg-slate-50/70 border border-slate-200 rounded-lg focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-dinamica-red cursor-pointer"
               >
                 <option value="Todos">Todos los Departamentos</option>
                 {departamentosDisponibles.map((dep) => (
@@ -640,7 +655,7 @@ export default function App() {
               <select
                 value={filtroEstado}
                 onChange={(e) => setFiltroEstado(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50/70 border border-slate-200 rounded-lg focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-800 cursor-pointer"
+                className="w-full px-3 py-2 text-xs bg-slate-50/70 border border-slate-200 rounded-lg focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-dinamica-red cursor-pointer"
               >
                 <option value="Todos">Todos los Estados</option>
                 <option value="Operativo">Operativo</option>
@@ -697,10 +712,10 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleExportCsv}
-                  className="px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-md font-semibold text-3xs flex items-center gap-1 transition-colors cursor-pointer"
+                  className="px-2 py-1 bg-dinamica-charcoal/5 hover:bg-dinamica-charcoal/10 text-dinamica-charcoal border border-dinamica-charcoal/15 rounded-md font-semibold text-3xs flex items-center gap-1 transition-colors cursor-pointer"
                   title="Descargar lista filtrada en CSV (.csv)"
                 >
-                  <FileSpreadsheet className="w-3 h-3 text-sky-600" />
+                  <FileSpreadsheet className="w-3 h-3" />
                   CSV (.csv)
                 </button>
               </div>
@@ -742,7 +757,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={openCreateModal}
-                className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 cursor-pointer shadow-xs inline-flex items-center gap-1.5"
+                className="px-4 py-2 text-xs font-semibold text-white bg-dinamica-red rounded-lg hover:bg-dinamica-darkred cursor-pointer shadow-xs inline-flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Registrar Primer Equipo
@@ -778,7 +793,7 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => openDetailModal(equipo)}
-                            className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0 cursor-pointer hover:ring-2 hover:ring-slate-800 transition-all"
+                            className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0 cursor-pointer hover:ring-2 hover:ring-dinamica-darkred transition-all"
                             title="Ver fotografía y ficha completa"
                           >
                             {equipo.imagen_url ? (
@@ -953,10 +968,10 @@ export default function App() {
       <footer className="bg-white border-t border-slate-200 py-3 text-center text-2xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>
-            Sistema de Inventario de Cómputo All-in-One • Base de Datos Relacional SQLite / MariaDB
+            Grupo Empresarial Dinámica S.A.S. • Dirección de Tecnología e Infraestructura
           </span>
           <span className="text-slate-400">
-            Node.js Express REST API • Control de Acceso RBAC (ADMIN, TÉCNICO, CALIDAD)
+            Sistema de Control y Auditoría de Equipos • RBAC (ADMIN, TÉCNICO, CALIDAD)
           </span>
         </div>
       </footer>
@@ -986,18 +1001,23 @@ export default function App() {
         isDeleting={isDeleting}
       />
 
-      <SqlExportModal
-        isOpen={isSqlModalOpen}
-        onClose={() => setIsSqlModalOpen(false)}
-      />
+      {userRole === 'ADMIN' && (
+        <>
+          <SqlExportModal
+            isOpen={isSqlModalOpen}
+            onClose={() => setIsSqlModalOpen(false)}
+            token={session.token}
+          />
 
-      <DatabaseStatusModal
-        isOpen={isDbStatusModalOpen}
-        onClose={() => setIsDbStatusModalOpen(false)}
-        status={dbStatus}
-        isLoading={isCheckingDb}
-        onRefresh={fetchDbStatus}
-      />
+          <DatabaseStatusModal
+            isOpen={isDbStatusModalOpen}
+            onClose={() => setIsDbStatusModalOpen(false)}
+            status={dbStatus}
+            isLoading={isCheckingDb}
+            onRefresh={fetchDbStatus}
+          />
+        </>
+      )}
     </div>
   );
 }

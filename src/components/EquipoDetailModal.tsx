@@ -74,10 +74,10 @@ export const EquipoDetailModal: React.FC<EquipoDetailModalProps> = ({
   const diadema = equipo.perifericos?.find((p) => p.tipo === 'Diadema');
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[92vh] flex flex-col border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl my-auto max-h-[92vh] flex flex-col border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
         {/* Cabecera */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70 rounded-t-2xl">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50/70 rounded-t-2xl">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-slate-900 text-white rounded-xl shadow-xs">
               <Monitor className="w-5 h-5" />
@@ -102,7 +102,7 @@ export const EquipoDetailModal: React.FC<EquipoDetailModalProps> = ({
         </div>
 
         {/* Contenido */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           {/* Ficha superior con imagen y datos principales */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {/* Imagen adjunta */}

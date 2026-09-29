@@ -20,7 +20,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
       title: 'Total All-in-One',
       value: stats.totalEquipos,
       icon: Monitor,
-      color: 'text-slate-900',
+      color: 'text-dinamica-charcoal',
       bg: 'bg-white',
       border: 'border-slate-200',
       badge: 'Equipos PC',
@@ -50,9 +50,9 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
       title: 'Dañados / Desuso',
       value: stats.danados + stats.enBodega,
       icon: XCircle,
-      color: 'text-rose-700',
-      bg: 'bg-rose-50/50',
-      border: 'border-rose-200',
+      color: 'text-dinamica-darkred',
+      bg: 'bg-dinamica-red/[0.04]',
+      border: 'border-dinamica-red/20',
       badge: 'Requiere atención',
       filterKey: stats.danados > 0 ? 'Dañado' : 'En bodega / Desuso',
     },
@@ -71,7 +71,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
             className={`text-left p-4 rounded-xl border transition-all duration-200 cursor-pointer shadow-xs hover:shadow-md ${
               card.bg
             } ${card.border} ${
-              isSelected ? 'ring-2 ring-slate-800 shadow-sm' : 'hover:border-slate-300'
+              isSelected ? 'ring-2 ring-dinamica-darkred shadow-sm' : 'hover:border-slate-300'
             }`}
           >
             <div className="flex items-center justify-between mb-2">

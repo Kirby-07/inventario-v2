@@ -28,6 +28,7 @@ import {
   createToken,
   authenticateToken,
   requireRoles,
+  requireEquipoAccess,
   AuthenticatedRequest,
 } from './server/auth.ts';
 
@@ -43,8 +44,8 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Endpoint de diagnóstico para validar el estado de la base de datos (SQLite o MySQL)
-app.get('/api/db/status', async (req, res) => {
+// Endpoint de diagnóstico del motor de base de datos — solo ADMIN (información sensible de infraestructura)
+app.get('/api/db/status', authenticateToken, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res) => {
   const isCloudConfigured = isMySQLConfigured();
   if (!isCloudConfigured) {
     return res.json({
@@ -61,7 +62,7 @@ app.get('/api/db/status', async (req, res) => {
       engine: 'mysql',
       status: 'connected',
       isCloud: true,
-      message: 'Conexión exitosa a la base de datos externa en la nube.',
+      message: 'Conexión exitosa a la base de datos externa (MariaDB / MySQL).',
       details: testResult,
     });
   } else {
@@ -166,8 +167,8 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ success: true, message: 'Sesión finalizada exitosamente.' });
 });
 
-// 4. Listar todos los roles disponibles
-app.get('/api/roles', async (req, res) => {
+// 4. Listar todos los roles disponibles (cualquier rol autenticado)
+app.get('/api/roles', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     if (!requireMySQL(res)) return;
     const roles = await getAllRolesMySQL();
@@ -181,7 +182,7 @@ app.get('/api/roles', async (req, res) => {
 // GESTIÓN DE USUARIOS (RBAC - Solo Administrador)
 // ==========================================
 
-app.get('/api/usuarios', authenticateToken, async (req: AuthenticatedRequest, res) => {
+app.get('/api/usuarios', authenticateToken, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res) => {
   try {
     if (!requireMySQL(res)) return;
     const usuarios = await getAllUsuariosMySQL();
@@ -283,9 +284,9 @@ app.delete('/api/usuarios/:id', authenticateToken, requireRoles('ADMIN'), async 
   }
 });
 
-// Rutas del CRUD de Equipos
+// Rutas del CRUD de Equipos (RBAC vía requireEquipoAccess: read/write/delete)
 // 1. Listar equipos con filtros
-app.get('/api/equipos', async (req, res) => {
+app.get('/api/equipos', ...requireEquipoAccess('read'), async (req, res) => {
   try {
     const { search, departamento, estado } = req.query;
     const equipos = await getAllEquipos({
@@ -301,7 +302,7 @@ app.get('/api/equipos', async (req, res) => {
 });
 
 // 2. Obtener un equipo por ID con sus periféricos
-app.get('/api/equipos/:id', async (req, res) => {
+app.get('/api/equipos/:id', ...requireEquipoAccess('read'), async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) {
@@ -318,8 +319,8 @@ app.get('/api/equipos/:id', async (req, res) => {
   }
 });
 
-// 3. Crear nuevo equipo All in One y periféricos
-app.post('/api/equipos', async (req, res) => {
+// 3. Crear nuevo equipo All in One y periféricos (ADMIN y TECNICO)
+app.post('/api/equipos', ...requireEquipoAccess('write'), async (req, res) => {
   try {
     const {
       numero_activo,
@@ -361,8 +362,8 @@ app.post('/api/equipos', async (req, res) => {
   }
 });
 
-// 4. Actualizar equipo y periféricos
-app.put('/api/equipos/:id', async (req, res) => {
+// 4. Actualizar equipo y periféricos (ADMIN y TECNICO)
+app.put('/api/equipos/:id', ...requireEquipoAccess('write'), async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) {
@@ -408,8 +409,8 @@ app.put('/api/equipos/:id', async (req, res) => {
   }
 });
 
-// 5. Eliminar equipo
-app.delete('/api/equipos/:id', async (req, res) => {
+// 5. Eliminar equipo (solo ADMIN)
+app.delete('/api/equipos/:id', ...requireEquipoAccess('delete'), async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) {
@@ -423,8 +424,8 @@ app.delete('/api/equipos/:id', async (req, res) => {
   }
 });
 
-// 6. Estadísticas para panel de auditoría
-app.get('/api/stats', async (req, res) => {
+// 6. Estadísticas para panel de auditoría (cualquier rol autenticado)
+app.get('/api/stats', ...requireEquipoAccess('read'), async (req, res) => {
   try {
     const stats = await getInventoryStats();
     res.json(stats);
@@ -434,8 +435,8 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
-// 7. Descargar script SQL relacional (compatible con MariaDB / MySQL)
-app.get('/api/export/mariadb.sql', async (req, res) => {
+// 7. Descargar script SQL relacional — solo ADMIN (estructura interna de la base de datos)
+app.get('/api/export/mariadb.sql', authenticateToken, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res) => {
   try {
     const sql = await generateMariaDbScript();
     res.setHeader('Content-Type', 'application/sql');
